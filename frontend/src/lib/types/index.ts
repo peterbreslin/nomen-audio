@@ -258,7 +258,6 @@ export interface UCSCategory {
 export interface CustomFieldDef {
 	tag: string;
 	label: string;
-	ai_prompt: string | null;
 }
 
 export interface AppSettings {

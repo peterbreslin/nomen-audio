@@ -105,10 +105,7 @@
 		<!-- View controls -->
 		<div class="flex items-center gap-1 px-3 pb-1">
 			<button
-				class="rounded-sm px-1.5 py-0.5 text-[9px] uppercase tracking-wider
-					{uiStore.sidebarFlatView
-						? 'bg-[var(--accent-muted)] text-[var(--accent-text)]'
-						: 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}"
+				class="rounded-sm px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
 				onclick={toggleFlatView}
 				title={uiStore.sidebarFlatView ? 'Switch to folder view' : 'Switch to flat file list'}
 			>

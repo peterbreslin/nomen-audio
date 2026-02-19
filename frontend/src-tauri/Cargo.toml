@@ -25,4 +25,3 @@ tauri = { version = "2.10.0", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-http = "2"
-tauri-plugin-mcp = { path = "plugins/tauri-plugin-mcp" }

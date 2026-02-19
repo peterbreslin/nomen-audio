@@ -11,8 +11,8 @@ if (Test-Path "dist/nomen-sidecar") {
     Write-Host "Cleaned previous build" -ForegroundColor Yellow
 }
 
-# Run PyInstaller
-uv run pyinstaller nomen-sidecar.spec --clean
+# Run PyInstaller (use -m to avoid broken entry-point shim)
+uv run python -m PyInstaller nomen-sidecar.spec --clean
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "PyInstaller build failed" -ForegroundColor Red

@@ -49,7 +49,6 @@ class CustomFieldDef(BaseModel):
 
     tag: str
     label: str
-    ai_prompt: str | None = None
 
 
 class AppSettings(BaseModel):

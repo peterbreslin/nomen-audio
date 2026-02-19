@@ -9,21 +9,17 @@
 	interface Props {
 		onSaveAll: () => void;
 		onGenerateAll: () => void;
+		onGenerateSelected: () => void;
 		onCancelGenerate: () => void;
 		isGenerating: boolean;
 		batchProgress: { current: number; total: number; filename: string } | null;
 	}
 
-	let { onSaveAll, onGenerateAll, onCancelGenerate, isGenerating, batchProgress }: Props = $props();
+	let { onSaveAll, onGenerateAll, onGenerateSelected, onCancelGenerate, isGenerating, batchProgress }: Props = $props();
 
 	let settingsOpen = $state(false);
 	let hasModified = $derived(fileStore.modifiedFileIds.length > 0);
 	let selectedCount = $derived(fileStore.selectedFileIds.size);
-	let generateLabel = $derived(
-		isGenerating ? 'Generating...'
-		: selectedCount > 1 ? `Generate Selected (${selectedCount})`
-		: 'Generate All'
-	);
 </script>
 
 <div>
@@ -92,6 +88,17 @@
 				{uiStore.allColumnsExpanded ? 'Collapse All' : 'Expand All'}
 			</button>
 
+			<!-- Generate Selected (visible when >1 selected) -->
+			{#if selectedCount > 1}
+				<button
+					class="rounded-sm border border-[var(--border-default)] px-2 py-1 text-[10px] text-[var(--text-secondary)] hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)] disabled:cursor-default disabled:opacity-40"
+					onclick={onGenerateSelected}
+					disabled={isGenerating || !modelsStore.isReady}
+				>
+					Generate ({selectedCount})
+				</button>
+			{/if}
+
 			<!-- Generate All -->
 			<Tooltip.Root>
 				<Tooltip.Trigger>
@@ -116,7 +123,7 @@
 						</button>
 					{/snippet}
 				</Tooltip.Trigger>
-				<Tooltip.Content><p>{generateLabel}</p></Tooltip.Content>
+				<Tooltip.Content><p>Generate All</p></Tooltip.Content>
 			</Tooltip.Root>
 		</div>
 	</header>

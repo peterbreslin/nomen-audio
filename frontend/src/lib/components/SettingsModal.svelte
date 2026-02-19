@@ -13,6 +13,7 @@
 	import { friendlyMessage } from '$lib/utils/errors';
 	import * as api from '$lib/api/client';
 	import { fileStore } from '$lib/stores/files.svelte';
+	import * as Popover from '$lib/components/ui/popover';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import Eye from '@lucide/svelte/icons/eye';
@@ -46,7 +47,6 @@
 	let renameOnSave = $state(true);
 	let llmProvider = $state('__none__');
 	let llmApiKey = $state('');
-	let modelDirectory = $state('');
 	let customFields = $state<CustomFieldDef[]>([]);
 	let showApiKey = $state(false);
 	let saving = $state(false);
@@ -63,7 +63,6 @@
 			renameOnSave = s.rename_on_save_default;
 			llmProvider = s.llm_provider ?? '__none__';
 			llmApiKey = '';
-			modelDirectory = s.model_directory;
 			customFields = s.custom_fields.map((f) => ({ ...f }));
 			showApiKey = false;
 			tagErrors = {};
@@ -71,7 +70,7 @@
 	});
 
 	function addCustomField() {
-		customFields = [...customFields, { tag: '', label: '', ai_prompt: null }];
+		customFields = [...customFields, { tag: '', label: '' }];
 	}
 
 	function removeCustomField(index: number) {
@@ -110,7 +109,6 @@
 				library_template: libraryTemplate,
 				rename_on_save_default: renameOnSave,
 				llm_provider: llmProvider === '__none__' ? null : llmProvider,
-				model_directory: modelDirectory,
 				custom_fields: customFields
 			};
 			if (llmApiKey) {
@@ -151,9 +149,6 @@
 	<Dialog.Content class="max-w-lg gap-0 p-0">
 		<Dialog.Header class="px-5 pt-5 pb-3">
 			<Dialog.Title class="text-base font-semibold">Settings</Dialog.Title>
-			<Dialog.Description class="text-xs text-muted-foreground">
-				Configure application preferences
-			</Dialog.Description>
 		</Dialog.Header>
 
 		<ScrollArea class="max-h-[60vh] px-5">
@@ -247,16 +242,15 @@
 						</Button>
 					</div>
 					{#if customFields.length > 0}
-						<div class="mb-1 grid grid-cols-[80px_1fr_1fr_28px] gap-x-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+						<div class="mb-1 grid grid-cols-[100px_1fr_28px] gap-x-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
 							<span>Tag</span>
 							<span>Label</span>
-							<span>AI Prompt</span>
 							<span></span>
 						</div>
 						<ScrollArea class={customFields.length > 4 ? 'max-h-36' : ''}>
 							<div class="space-y-1.5">
 								{#each customFields as field, i (i)}
-									<div class="grid grid-cols-[80px_1fr_1fr_28px] items-start gap-x-2">
+									<div class="grid grid-cols-[100px_1fr_28px] items-start gap-x-2">
 										<div>
 											<Input
 												bind:value={field.tag}
@@ -272,15 +266,6 @@
 											{/if}
 										</div>
 										<Input bind:value={field.label} placeholder="Display label" class="h-7 text-xs" />
-										<Input
-											value={field.ai_prompt ?? ''}
-											placeholder="Optional"
-											class="h-7 text-xs"
-											oninput={(e) => {
-												const val = e.currentTarget.value;
-												field.ai_prompt = val || null;
-											}}
-										/>
 										<Button
 											variant="ghost"
 											size="sm"
@@ -302,24 +287,46 @@
 
 				<!-- Models -->
 				<section>
-					<h3 class="mb-2.5 text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-						Models
-					</h3>
-					<div class="mb-3 flex items-center gap-4">
-						<div class="flex items-center gap-1.5">
-							<span class="inline-block h-2 w-2 rounded-full {modelsStore.status?.clap_loaded ? 'bg-success' : 'bg-destructive'}"></span>
-							<span class="text-xs text-muted-foreground">CLAP</span>
-						</div>
-						<div class="flex items-center gap-1.5">
-							<span class="inline-block h-2 w-2 rounded-full {modelsStore.status?.clapcap_loaded ? 'bg-success' : 'bg-destructive'}"></span>
-							<span class="text-xs text-muted-foreground">ClapCap</span>
-						</div>
-						<span class="text-xs text-muted-foreground/60">{modelsStore.statusMessage}</span>
+					<div class="mb-2.5 flex items-center gap-1.5">
+						<h3 class="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
+							Models
+						</h3>
+						<Popover.Root>
+							<Popover.Trigger>
+								{#snippet child({ props })}
+									<button
+										{...props}
+										class="flex h-4 w-4 items-center justify-center rounded-full border border-muted-foreground/40 text-[10px] font-semibold text-muted-foreground/60 hover:border-muted-foreground hover:text-muted-foreground"
+									>?</button>
+								{/snippet}
+							</Popover.Trigger>
+							<Popover.Content class="w-[540px] space-y-3 p-4 text-xs leading-relaxed">
+								<div>
+									<p class="mb-1 font-semibold text-foreground">Classifier</p>
+									<p class="text-muted-foreground">Uses the pre-trained MS-CLAP 2023 model to compare an asset to various audio embeddings against text embeddings for all 753 UCS subcategories. It's zero-shot and works to understand semantic relationship between sounds and text descriptions. The subcategories have been modified to include two text prompts (a curated acoustic description + the raw UCS explanation), and the scores from the model output are blended. The filename is also tokenized and keyword-matched against UCS synonyms, then combined with the CLAP score to produce a final ranking. Output: top-N subcategory matches with confidence scores, which map directly to UCS category, subcategory, CatID, and a suggested filename.</p>
+								</div>
+								<div>
+									<p class="mb-1 font-semibold text-foreground">Captioner</p>
+									<p class="text-muted-foreground">Uses MS-CLAP's clapcap variant, which pairs CLAP audio embeddings with a GPT-2 decoder to generate natural language captions (e.g. "a wooden door creaking open slowly with a long metallic squeak"). That caption populates the Description field; key terms are extracted for FX Name. The model is lazy-loaded on first use (~2.1 GB).</p>
+								</div>
+								<p class="text-muted-foreground/80 italic">In short: CLAP tells you what category the sound belongs to. ClapCap tells you what the sound actually sounds like in plain English. Together they fill in the full metadata set — category, subcategory, filename, description, and keywords — from the audio alone.</p>
+							</Popover.Content>
+						</Popover.Root>
 					</div>
-					<div class="grid grid-cols-[120px_1fr] items-center gap-x-3">
-						<label for="s-modeldir" class="text-sm text-muted-foreground">Model Directory</label>
-						<Input id="s-modeldir" bind:value={modelDirectory} class="h-9 text-sm" />
-					</div>
+					{#if modelsStore.status}
+						<div class="flex items-center gap-4">
+							<div class="flex items-center gap-1.5">
+								<span class="inline-block h-2 w-2 rounded-full {modelsStore.status.clap_loaded ? 'bg-green-500' : 'bg-red-500'}"></span>
+								<span class="text-xs text-muted-foreground">CLAP</span>
+							</div>
+							<div class="flex items-center gap-1.5">
+								<span class="inline-block h-2 w-2 rounded-full {modelsStore.status.clapcap_loaded ? 'bg-green-500' : 'bg-muted-foreground/30'}"></span>
+								<span class="text-xs text-muted-foreground">
+									ClapCap{#if !modelsStore.status.clapcap_loaded}&nbsp;<span class="text-muted-foreground/50">(on demand)</span>{/if}
+								</span>
+							</div>
+						</div>
+					{/if}
 				</section>
 
 				<Separator />

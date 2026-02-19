@@ -56,6 +56,14 @@ export function importDirectory(directory: string, recursive = true): Promise<Im
 	});
 }
 
+export function importFiles(paths: string[]): Promise<ImportResponse> {
+	return json('/files/import-files', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ paths })
+	});
+}
+
 // ---------------------------------------------------------------------------
 // Files CRUD
 // ---------------------------------------------------------------------------

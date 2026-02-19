@@ -17,19 +17,20 @@ All scripts require:
 
 Runs all five steps in sequence and aborts on the first failure:
 
-| Step | Action |
-|---|---|
-| 1/5 | `uv run pytest -q` — full Python test suite |
-| 2/5 | `uv run ruff check .` — lint check |
-| 3/5 | `build-sidecar.ps1` — PyInstaller sidecar |
-| 4/5 | `npm run tauri build` — Tauri installer (MSI + NSIS) |
-| 5/5 | Print installer paths and sizes |
+| Step | Action                                               |
+| ---- | ---------------------------------------------------- |
+| 1/5  | `uv run pytest -q` — full Python test suite          |
+| 2/5  | `uv run ruff check .` — lint check                   |
+| 3/5  | `build-sidecar.ps1` — PyInstaller sidecar            |
+| 4/5  | `npm run tauri build` — Tauri installer (MSI + NSIS) |
+| 5/5  | Print installer paths and sizes                      |
 
 ```pwsh
 pwsh -NoProfile -File scripts/build.ps1
 ```
 
 Installers are written to:
+
 - `frontend/src-tauri/target/release/bundle/msi/`
 - `frontend/src-tauri/target/release/bundle/nsis/`
 
@@ -51,12 +52,12 @@ Run this in isolation when iterating on the Python backend without a full Tauri 
 
 Starts the compiled sidecar binary, reads its `PORT=<n>` from stdout, and exercises four critical endpoints:
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /health` | Liveness check |
-| `GET /ucs/categories` | UCS data loaded |
-| `GET /settings` | Settings service alive |
-| `GET /models/status` | ML model state readable |
+| Endpoint              | Purpose                 |
+| --------------------- | ----------------------- |
+| `GET /health`         | Liveness check          |
+| `GET /ucs/categories` | UCS data loaded         |
+| `GET /settings`       | Settings service alive  |
+| `GET /models/status`  | ML model state readable |
 
 ```pwsh
 pwsh -NoProfile -File scripts/test-sidecar.ps1

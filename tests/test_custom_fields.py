@@ -164,6 +164,23 @@ def test_writer_roundtrip_custom_fields(tmp_path):
     assert cf.get("LOCATION") == "Studio"
 
 
+def test_writer_custom_fields_only_roundtrip(tmp_path):
+    """Custom-fields-only metadata must create iXML from scratch (no existing iXML)."""
+    wav = build_wav()  # No iXML chunk at all
+    p = tmp_path / "custom_only.wav"
+    p.write_bytes(wav)
+
+    write_metadata(
+        str(p),
+        {"custom_fields": {"RECORDIST": "Jane", "LOCATION": "Studio"}},
+    )
+
+    meta = read_metadata(str(p))
+    cf = meta.get("custom_fields") or {}
+    assert cf.get("RECORDIST") == "Jane"
+    assert cf.get("LOCATION") == "Studio"
+
+
 # ---------------------------------------------------------------------------
 # API tests (Commit 9: 2C.8b)
 # ---------------------------------------------------------------------------
