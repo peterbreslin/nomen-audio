@@ -1,10 +1,10 @@
 <script lang="ts">
 	import type { FileRecord } from '$lib/types';
-	import type { SubColumn } from './columns';
+	import type { ColumnGroup, SubColumn } from './columns';
 	import { fileStore } from '$lib/stores/files.svelte';
 	import { uiStore } from '$lib/stores/ui.svelte';
 	import { modelsStore } from '$lib/stores/models.svelte';
-	import { COLUMN_GROUPS, getCellValue, isEditableField, AI_BADGE_FIELDS } from './columns';
+	import { getCellValue, isEditableField, AI_BADGE_FIELDS } from './columns';
 	import * as ContextMenu from '$lib/components/ui/context-menu';
 	import * as api from '$lib/api/client';
 	import { toast } from 'svelte-sonner';
@@ -14,12 +14,14 @@
 		file: FileRecord;
 		index: number;
 		onGenerate: (id: string) => void;
+		onGenerateSelected: () => void;
+		allGroups: ColumnGroup[];
 		getVisibleSubs: (groupKey: string) => SubColumn[];
 		onToggleDetail: () => void;
 		onViewDetails: (id: string) => void;
 	}
 
-	let { file, index, onGenerate, getVisibleSubs, onToggleDetail, onViewDetails }: Props = $props();
+	let { file, index, onGenerate, onGenerateSelected, allGroups, getVisibleSubs, onToggleDetail, onViewDetails }: Props = $props();
 
 	let isGenerating = $state(false);
 	let isSelected = $derived(fileStore.selectedFileIds.has(file.id));
@@ -169,7 +171,7 @@
 				</td>
 
 				<!-- Data cells -->
-				{#each COLUMN_GROUPS as group (group.key)}
+				{#each allGroups as group (group.key)}
 					{#each getVisibleSubs(group.key) as sub (sub.key)}
 						{@const dotColor = getDotColor(sub.key)}
 						<td
@@ -205,6 +207,12 @@
 			</svg>
 			Generate
 		</ContextMenu.Item>
+
+		{#if hasMultipleSelected}
+			<ContextMenu.Item onclick={onGenerateSelected} disabled={!modelsStore.isReady || isGenerating}>
+				Generate ({selectedCount})
+			</ContextMenu.Item>
+		{/if}
 
 		<ContextMenu.Separator />
 

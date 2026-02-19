@@ -102,6 +102,25 @@ export const COLUMN_GROUPS: ColumnGroup[] = [
 	}
 ];
 
+/** Build column groups with optional custom field columns appended. */
+export function buildColumnGroups(
+	customDefs: { tag: string; label: string }[]
+): ColumnGroup[] {
+	if (!customDefs.length) return COLUMN_GROUPS;
+	const customGroup: ColumnGroup = {
+		key: 'custom',
+		label: 'CUSTOM',
+		defaultWidth: 10,
+		subs: customDefs.map((def) => ({
+			key: 'cf_' + def.tag,
+			label: def.label,
+			mono: false,
+			fileRecordKey: 'cf_' + def.tag
+		}))
+	};
+	return [...COLUMN_GROUPS, customGroup];
+}
+
 /** Derive CatShort from CatID: uppercase prefix letters */
 export function getCatShort(catId: string | null): string {
 	return catId?.match(/^[A-Z]+/)?.[0] ?? '';
@@ -112,6 +131,9 @@ export function getCellValue(file: FileRecord, sub: SubColumn): string {
 	if (sub.key === 'cat_short') {
 		return getCatShort(file.cat_id);
 	}
+	if (sub.key.startsWith('cf_')) {
+		return file.custom_fields?.[sub.key.slice(3)] ?? '';
+	}
 	const val = file[sub.fileRecordKey as keyof FileRecord];
 	if (val === null || val === undefined) return '';
 	return String(val);
@@ -121,6 +143,7 @@ export function getCellValue(file: FileRecord, sub: SubColumn): string {
 const READ_ONLY_FIELDS = new Set(['filename', 'cat_short', 'category_full', 'cat_id']);
 
 export function isEditableField(key: string): boolean {
+	if (key.startsWith('cf_')) return true;
 	return !READ_ONLY_FIELDS.has(key);
 }
 
@@ -175,12 +198,13 @@ export function getColumnPx(
 
 /** Compute the total table width in px (always pixel-based). */
 export function getTableWidthPx(
+	groups: ColumnGroup[],
 	expandedCols: Set<string>,
 	allExpanded: boolean,
 	containerWidth: number
 ): number {
 	let total = WAND_COL_PX;
-	for (const g of COLUMN_GROUPS) {
+	for (const g of groups) {
 		total += getColumnPx(g, expandedCols, allExpanded, containerWidth);
 	}
 	return Math.max(total, containerWidth);

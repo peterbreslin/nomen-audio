@@ -1,16 +1,17 @@
 <script lang="ts">
 	import type { FileRecord } from '$lib/types';
+	import type { ColumnGroup } from './columns';
 	import { fileStore } from '$lib/stores/files.svelte';
-	import { COLUMN_GROUPS } from './columns';
 	import { uiStore } from '$lib/stores/ui.svelte';
 	import * as api from '$lib/api/client';
 
 	interface Props {
 		file: FileRecord;
+		allGroups: ColumnGroup[];
 		onClose: () => void;
 	}
 
-	let { file, onClose }: Props = $props();
+	let { file, allGroups, onClose }: Props = $props();
 
 	let matches = $derived(file.analysis?.classification?.slice(0, 3) ?? []);
 
@@ -20,7 +21,7 @@
 	// Total visible columns: 1 (wand) + sum of visible sub-columns
 	let totalCols = $derived.by(() => {
 		let count = 1; // wand col
-		for (const g of COLUMN_GROUPS) {
+		for (const g of allGroups) {
 			count += uiStore.allColumnsExpanded || uiStore.expandedColumns.has(g.key)
 				? g.subs.length
 				: 1;
@@ -53,7 +54,8 @@
 </script>
 
 <tr class="border-t border-[var(--border-focus)]">
-	<td colspan={totalCols} class="bg-[var(--bg-raised)] px-3 py-2">
+	<td class="bg-[var(--bg-raised)]"></td>
+	<td colspan={totalCols - 1} class="bg-[var(--bg-raised)] px-3 py-2">
 		<div class="flex items-center gap-4">
 			{#each matches as match, i (match.cat_id + i)}
 				{@const rankColor = RANK_COLORS[i] ?? RANK_COLORS[2]}

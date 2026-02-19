@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { fileStore } from '$lib/stores/files.svelte';
 	import { uiStore } from '$lib/stores/ui.svelte';
-	import { COLUMN_GROUPS, COMBOBOX_FIELDS, getColumnPx, getTableWidthPx } from './columns';
+	import { settingsStore } from '$lib/stores/settings.svelte';
+	import { COLUMN_GROUPS, buildColumnGroups, COMBOBOX_FIELDS, getColumnPx, getTableWidthPx } from './columns';
 	import SheetRow from './SheetRow.svelte';
 	import CellEditOverlay from './CellEditOverlay.svelte';
 	import CellCombobox from './CellCombobox.svelte';
@@ -10,9 +11,10 @@
 
 	interface Props {
 		onGenerate: (id: string) => void;
+		onGenerateSelected: () => void;
 	}
 
-	let { onGenerate }: Props = $props();
+	let { onGenerate, onGenerateSelected }: Props = $props();
 
 	/** Local state: which row has the analysis detail expanded */
 	let expandedDetailRowId = $state<string | null>(null);
@@ -27,16 +29,18 @@
 	let expandedCols = $derived(uiStore.expandedColumns);
 	let allExpanded = $derived(uiStore.allColumnsExpanded);
 
+	let allGroups = $derived(buildColumnGroups(settingsStore.settings?.custom_fields ?? []));
+
 	let showSubHeaders = $derived(expandedCols.size > 0 || allExpanded);
 
-	let tableWidthPx = $derived(getTableWidthPx(expandedCols, allExpanded, containerWidth));
+	let tableWidthPx = $derived(getTableWidthPx(allGroups, expandedCols, allExpanded, containerWidth));
 
 	function isExpanded(groupKey: string): boolean {
 		return allExpanded || expandedCols.has(groupKey);
 	}
 
 	function getVisibleSubs(groupKey: string) {
-		const group = COLUMN_GROUPS.find((g) => g.key === groupKey)!;
+		const group = allGroups.find((g) => g.key === groupKey)!;
 		return isExpanded(groupKey) ? group.subs : [group.subs[0]];
 	}
 
@@ -50,7 +54,7 @@
 	const HEADER_COLORS = ['var(--plasma-violet)', 'var(--hyper-pink)'];
 
 	function getHeaderColor(groupKey: string): string {
-		const idx = COLUMN_GROUPS.findIndex((g) => g.key === groupKey);
+		const idx = allGroups.findIndex((g) => g.key === groupKey);
 		return HEADER_COLORS[idx % 2];
 	}
 
@@ -89,7 +93,7 @@
 						class="w-8 border-b border-[var(--border-default)] bg-[var(--bg-surface)]"
 					></th>
 
-					{#each COLUMN_GROUPS as group (group.key)}
+					{#each allGroups as group (group.key)}
 						<th
 							class="cursor-pointer select-none whitespace-nowrap border-b border-[var(--border-default)] bg-[var(--bg-surface)] px-2 text-left text-[10px] font-semibold uppercase tracking-wider"
 							style="{colStyle(group)}; color: {getHeaderColor(group.key)}"
@@ -117,7 +121,7 @@
 				{#if showSubHeaders}
 					<tr class="h-[26px]" style="position: sticky; top: 30px; z-index: 5;">
 						<th class="border-b border-[var(--border-default)] bg-[var(--bg-raised)]"></th>
-						{#each COLUMN_GROUPS as group (group.key)}
+						{#each allGroups as group (group.key)}
 							{#each getVisibleSubs(group.key) as sub (sub.key)}
 								<th
 									class="whitespace-nowrap border-b border-[var(--border-default)] bg-[var(--bg-raised)] px-2 text-left text-[10px] font-medium"
@@ -137,6 +141,8 @@
 						{file}
 						{index}
 						{onGenerate}
+						{onGenerateSelected}
+						{allGroups}
 						getVisibleSubs={getVisibleSubs}
 						onToggleDetail={() => toggleDetailRow(file.id)}
 						onViewDetails={openDetailsModal}
@@ -144,6 +150,7 @@
 					{#if expandedDetailRowId === file.id && file.analysis}
 						<AnalysisDetailRow
 							{file}
+							{allGroups}
 							onClose={() => { expandedDetailRowId = null; }}
 						/>
 					{/if}

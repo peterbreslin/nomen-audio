@@ -11,11 +11,19 @@
 	let file = $derived(cell ? fileStore.files.get(cell.rowId) : null);
 	let mounted = $state(false);
 
+	function readCellValue(): string {
+		if (!cell || !file) return '';
+		if (cell.field.startsWith('cf_')) {
+			return file.custom_fields?.[cell.field.slice(3)] ?? '';
+		}
+		const raw = file[cell.field as keyof typeof file];
+		return raw != null ? String(raw) : '';
+	}
+
 	$effect(() => {
 		if (cell && file) {
 			mounted = false;
-			const raw = file[cell.field as keyof typeof file];
-			value = raw != null ? String(raw) : '';
+			value = readCellValue();
 			tick().then(() => {
 				textareaEl?.focus();
 				textareaEl?.select();
@@ -26,15 +34,21 @@
 
 	function finishEdit() {
 		if (!cell || !file) { uiStore.closeCellEdit(); return; }
-		const raw = file[cell.field as keyof typeof file];
-		const oldStr = raw != null ? String(raw) : '';
+		const oldStr = readCellValue();
 		const newStr = value || '';
 		if (newStr !== oldStr) {
-			fileStore.updateFieldLocally(cell.rowId, cell.field, value || null);
-			fileStore.clearAiField(cell.rowId, cell.field);
-			fileStore.markManualEdit(cell.rowId, cell.field);
-			// Sync to backend
-			api.updateMetadata(cell.rowId, { [cell.field]: value || null }).catch(() => {});
+			if (cell.field.startsWith('cf_')) {
+				const tag = cell.field.slice(3);
+				const merged = { ...(file.custom_fields ?? {}), [tag]: value || '' };
+				fileStore.updateFieldLocally(cell.rowId, 'custom_fields', merged);
+				fileStore.markManualEdit(cell.rowId, cell.field);
+				api.updateMetadata(cell.rowId, { custom_fields: merged }).catch(() => {});
+			} else {
+				fileStore.updateFieldLocally(cell.rowId, cell.field, value || null);
+				fileStore.clearAiField(cell.rowId, cell.field);
+				fileStore.markManualEdit(cell.rowId, cell.field);
+				api.updateMetadata(cell.rowId, { [cell.field]: value || null }).catch(() => {});
+			}
 		}
 		uiStore.closeCellEdit();
 	}

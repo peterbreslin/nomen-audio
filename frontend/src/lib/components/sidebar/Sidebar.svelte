@@ -2,12 +2,14 @@
 	import { uiStore } from '$lib/stores/ui.svelte';
 	import { fileStore } from '$lib/stores/files.svelte';
 	import FileTree from './FileTree.svelte';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
 
 	interface Props {
 		onBrowse: () => void;
+		onBrowseFiles: () => void;
 	}
 
-	let { onBrowse }: Props = $props();
+	let { onBrowse, onBrowseFiles }: Props = $props();
 	let isResizing = $state(false);
 
 	const MIN_WIDTH = 200;
@@ -83,12 +85,22 @@
 					Files
 				</span>
 			</div>
-			<button
-				class="rounded-sm border border-[var(--border-default)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)] hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)]"
-				onclick={onBrowse}
-			>
-				Browse
-			</button>
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger>
+					{#snippet child({ props })}
+						<button
+							{...props}
+							class="rounded-sm border border-[var(--border-default)] px-2 py-0.5 text-[10px] text-[var(--text-secondary)] hover:bg-[var(--bg-raised)] hover:text-[var(--text-primary)]"
+						>
+							Import
+						</button>
+					{/snippet}
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content class="w-36">
+					<DropdownMenu.Item onclick={onBrowse}>Import Folder</DropdownMenu.Item>
+					<DropdownMenu.Item onclick={onBrowseFiles}>Import Files</DropdownMenu.Item>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
 		</div>
 
 		<!-- Search -->

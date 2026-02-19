@@ -8,7 +8,7 @@ Write-Host ""
 
 # Step 1: Run tests
 Write-Host "[1/5] Running pytest..." -ForegroundColor Yellow
-uv run pytest -q
+uv run python -m pytest -q
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Tests failed! Aborting build." -ForegroundColor Red
     exit 1
@@ -18,7 +18,7 @@ Write-Host ""
 
 # Step 2: Lint check
 Write-Host "[2/5] Running ruff check..." -ForegroundColor Yellow
-uv run ruff check .
+uv run python -m ruff check .
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Linting failed! Aborting build." -ForegroundColor Red
     exit 1

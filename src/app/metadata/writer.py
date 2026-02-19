@@ -592,7 +592,9 @@ def _process_chunk(src, dst, chunk_id, data_size, metadata, state):
 def _append_missing_chunks(dst, metadata, state) -> None:
     """Creates bext/iXML/LIST-INFO chunks from scratch if not in source."""
     has_bext = any(k in metadata for k in ("description", "designer"))
-    has_ixml = any(k in metadata for k in (*USER_KEY_MAP, *ASWG_KEY_MAP))
+    has_ixml = any(k in metadata for k in (*USER_KEY_MAP, *ASWG_KEY_MAP)) or bool(
+        metadata.get("custom_fields")
+    )
 
     if not state["bext_handled"] and has_bext:
         _write_chunk(dst, CHUNK_BEXT, _build_new_bext(metadata))
@@ -769,7 +771,9 @@ def _parse_ixml_for_verify(info) -> ET.Element | None:
 
 def _verify_ixml(root: ET.Element | None, metadata: dict, errors: list[str]) -> None:
     """Checks USER fields in iXML against expected metadata."""
-    has_ixml_fields = any(k in metadata for k in USER_KEY_MAP)
+    has_ixml_fields = any(k in metadata for k in USER_KEY_MAP) or bool(
+        metadata.get("custom_fields")
+    )
     if not has_ixml_fields:
         return
 
@@ -795,6 +799,13 @@ def _verify_ixml(root: ET.Element | None, metadata: dict, errors: list[str]) -> 
             errors.append(
                 f"USER/<{xml_tag}> mismatch: expected '{expected}', got '{actual}'"
             )
+
+    custom = metadata.get("custom_fields", {})
+    for tag, expected in custom.items():
+        el = user.find(tag) if user is not None else None
+        actual = el.text if el is not None else None
+        if actual != expected:
+            errors.append(f"Custom field <{tag}>: expected '{expected}', got '{actual}'")
 
 
 # Reverse of ASWG_KEY_MAP: ASWG tag → metadata dict key (for verify)

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
 	COLUMN_GROUPS,
+	buildColumnGroups,
 	getCatShort,
 	getCellValue,
 	isEditableField,
@@ -161,21 +162,21 @@ describe('getTableWidthPx', () => {
 	const containerWidth = 1200;
 
 	it('returns approximately containerWidth when nothing expanded', () => {
-		const width = getTableWidthPx(new Set(), false, containerWidth);
+		const width = getTableWidthPx(COLUMN_GROUPS, new Set(), false, containerWidth);
 		// May be slightly larger due to rounding of individual column pixel widths
 		expect(width).toBeGreaterThanOrEqual(containerWidth);
 		expect(width).toBeLessThanOrEqual(containerWidth + COLUMN_GROUPS.length);
 	});
 
 	it('returns total px width when columns are expanded', () => {
-		const width = getTableWidthPx(new Set(['ucs']), false, containerWidth);
+		const width = getTableWidthPx(COLUMN_GROUPS, new Set(['ucs']), false, containerWidth);
 		expect(width).toBeGreaterThan(containerWidth);
 		expect(typeof width).toBe('number');
 	});
 
 	it('returns at least containerWidth', () => {
 		// Even with small expansions, table should be at least container width
-		const width = getTableWidthPx(new Set(['additional']), false, containerWidth);
+		const width = getTableWidthPx(COLUMN_GROUPS, new Set(['additional']), false, containerWidth);
 		expect(width).toBeGreaterThanOrEqual(containerWidth);
 	});
 });
@@ -241,5 +242,42 @@ describe('COMBOBOX_FIELDS', () => {
 		expect(SETTINGS_COMBOBOX_FIELDS.has('library')).toBe(true);
 		expect(SETTINGS_COMBOBOX_FIELDS.has('designer')).toBe(true);
 		expect(SETTINGS_COMBOBOX_FIELDS.size).toBe(4);
+	});
+});
+
+describe('buildColumnGroups', () => {
+	it('returns COLUMN_GROUPS when no custom defs', () => {
+		expect(buildColumnGroups([])).toBe(COLUMN_GROUPS);
+	});
+
+	it('appends a CUSTOM group when defs provided', () => {
+		const groups = buildColumnGroups([{ tag: 'MOOD', label: 'Mood' }]);
+		expect(groups.length).toBe(COLUMN_GROUPS.length + 1);
+		const custom = groups[groups.length - 1];
+		expect(custom.key).toBe('custom');
+		expect(custom.label).toBe('CUSTOM');
+		expect(custom.subs[0].key).toBe('cf_MOOD');
+		expect(custom.subs[0].label).toBe('Mood');
+	});
+});
+
+describe('custom field getCellValue', () => {
+	it('reads from custom_fields dict', () => {
+		const file = makeFile({ custom_fields: { MOOD: 'happy' } });
+		const sub = { key: 'cf_MOOD', label: 'Mood', mono: false, fileRecordKey: 'cf_MOOD' };
+		expect(getCellValue(file, sub)).toBe('happy');
+	});
+
+	it('returns empty when custom_fields is null', () => {
+		const file = makeFile();
+		const sub = { key: 'cf_MOOD', label: 'Mood', mono: false, fileRecordKey: 'cf_MOOD' };
+		expect(getCellValue(file, sub)).toBe('');
+	});
+});
+
+describe('custom field isEditableField', () => {
+	it('cf_ prefixed fields are editable', () => {
+		expect(isEditableField('cf_MOOD')).toBe(true);
+		expect(isEditableField('cf_ANYTHING')).toBe(true);
 	});
 });

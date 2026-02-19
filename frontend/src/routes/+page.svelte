@@ -33,10 +33,41 @@
 		await doImport(dir);
 	}
 
+	async function handleImportFiles() {
+		const result = await open({
+			title: 'Select WAV files to import',
+			multiple: true,
+			filters: [{ name: 'WAV Audio', extensions: ['wav'] }]
+		});
+		if (!result) return;
+		const paths = Array.isArray(result) ? result : [result];
+		if (paths.length === 0) return;
+		await doImportFiles(paths);
+	}
+
 	async function doImport(directory: string) {
 		uiStore.isImporting = true;
 		try {
 			const res = await api.importDirectory(directory);
+			fileStore.addFiles(res.files);
+			if (res.files.length > 0 && !fileStore.activeFileId) {
+				fileStore.setActiveFile(res.files[0].id);
+				fileStore.selectFile(res.files[0].id);
+			}
+			toast.success(`Imported ${res.count} files`, {
+				description: res.skipped > 0 ? `${res.skipped} skipped` : undefined
+			});
+		} catch (e) {
+			toast.error('Import failed', { description: friendlyMessage(e) });
+		} finally {
+			uiStore.isImporting = false;
+		}
+	}
+
+	async function doImportFiles(paths: string[]) {
+		uiStore.isImporting = true;
+		try {
+			const res = await api.importFiles(paths);
 			fileStore.addFiles(res.files);
 			if (res.files.length > 0 && !fileStore.activeFileId) {
 				fileStore.setActiveFile(res.files[0].id);
@@ -117,17 +148,7 @@
 		}
 	}
 
-	/** Generate for selected files (if multiple selected) or all visible files */
-	async function handleGenerateAll() {
-		const selected = fileStore.selectedFileIds;
-		const useSelected = selected.size > 1;
-		const pool = useSelected
-			? fileStore.visibleFiles.filter((f) => selected.has(f.id) && !f.analysis)
-			: fileStore.visibleFiles.filter((f) => !f.analysis);
-		if (pool.length === 0) {
-			toast.info(useSelected ? 'Selected files already analyzed' : 'All visible files already analyzed');
-			return;
-		}
+	async function _runBatchGenerate(pool: typeof fileStore.visibleFiles) {
 		uiStore.isGenerating = true;
 		batchAborted = false;
 		let current = 0;
@@ -152,6 +173,25 @@
 			batchProgress = null;
 			batchAborted = false;
 		}
+	}
+
+	async function handleGenerateSelected() {
+		const selected = fileStore.selectedFileIds;
+		const pool = fileStore.visibleFiles.filter((f) => selected.has(f.id) && !f.analysis);
+		if (pool.length === 0) {
+			toast.info('Selected files already analyzed');
+			return;
+		}
+		await _runBatchGenerate(pool);
+	}
+
+	async function handleGenerateAll() {
+		const pool = fileStore.visibleFiles.filter((f) => !f.analysis);
+		if (pool.length === 0) {
+			toast.info('All visible files already analyzed');
+			return;
+		}
+		await _runBatchGenerate(pool);
 	}
 
 	function handleCancelGenerate() {
@@ -218,9 +258,10 @@
 					uiStore.isDragOver = false;
 					const paths = event.payload.paths;
 					(async () => {
-						for (const path of paths) {
-							await doImport(path);
-						}
+						const wavFiles = paths.filter((p) => p.toLowerCase().endsWith('.wav'));
+						const dirs = paths.filter((p) => !p.toLowerCase().endsWith('.wav'));
+						if (wavFiles.length > 0) await doImportFiles(wavFiles);
+						for (const dir of dirs) await doImport(dir);
 					})().catch(() => {});
 				}
 			});
@@ -263,6 +304,7 @@
 	<Toolbar
 		onSaveAll={handleSaveAll}
 		onGenerateAll={handleGenerateAll}
+		onGenerateSelected={handleGenerateSelected}
 		onCancelGenerate={handleCancelGenerate}
 		isGenerating={uiStore.isGenerating}
 		{batchProgress}
@@ -276,10 +318,10 @@
 	{/if}
 
 	<main class="flex min-h-0 overflow-hidden">
-		<Sidebar onBrowse={handleImport} />
+		<Sidebar onBrowse={handleImport} onBrowseFiles={handleImportFiles} />
 
 		<div class="flex min-h-0 flex-1 flex-col overflow-hidden">
-			<Sheet onGenerate={handleGenerate} />
+			<Sheet onGenerate={handleGenerate} onGenerateSelected={handleGenerateSelected} />
 			<WaveformPanel />
 		</div>
 	</main>

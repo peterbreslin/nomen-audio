@@ -10,7 +10,7 @@ export interface EditingCell {
 }
 
 /** All column group keys — kept in sync with COLUMN_GROUPS in columns.ts */
-const ALL_COLUMN_KEYS = ['name', 'ucs', 'descriptors', 'creator', 'source_specs', 'additional'];
+const ALL_COLUMN_KEYS = ['name', 'ucs', 'descriptors', 'creator', 'source_specs', 'additional', 'custom'];
 
 class UIStore {
 	sidebarWidth = $state(220);

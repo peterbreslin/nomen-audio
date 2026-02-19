@@ -46,6 +46,7 @@ from app.models import (
     BatchUpdateResponse,
     ClassificationMatch,
     FileRecord,
+    ImportFilesRequest,
     ImportRequest,
     ImportResponse,
     MetadataUpdate,
@@ -90,6 +91,36 @@ async def import_files(req: ImportRequest) -> ImportResponse:
 
     # Remove stale records from this directory
     await _remove_stale_records(str(directory.resolve()), seen_paths)
+
+    elapsed_ms = int((time.monotonic() - start) * 1000)
+    return ImportResponse(
+        files=records,
+        count=len(records),
+        skipped=len(skipped_paths),
+        skipped_paths=skipped_paths,
+        import_time_ms=elapsed_ms,
+    )
+
+
+@router.post("/import-files", response_model=ImportResponse)
+async def import_individual_files(req: ImportFilesRequest) -> ImportResponse:
+    """Import a list of individual WAV file paths, store in DB."""
+    start = time.monotonic()
+    records: list[FileRecord] = []
+    skipped_paths: list[str] = []
+
+    for path_str in req.paths:
+        wav_path = Path(path_str)
+        if not wav_path.is_file() or wav_path.suffix.lower() != ".wav":
+            skipped_paths.append(path_str)
+            continue
+        abs_path = str(wav_path.resolve())
+        try:
+            record = await _import_single_file(wav_path, abs_path)
+            records.append(record)
+        except Exception:
+            logger.warning("Skipping unreadable file: %s", abs_path, exc_info=True)
+            skipped_paths.append(abs_path)
 
     elapsed_ms = int((time.monotonic() - start) * 1000)
     return ImportResponse(

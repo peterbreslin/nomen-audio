@@ -263,6 +263,12 @@ class ImportRequest(BaseModel):
     recursive: bool = True
 
 
+class ImportFilesRequest(BaseModel):
+    """Request body for POST /files/import-files."""
+
+    paths: list[str]
+
+
 class ImportResponse(BaseModel):
     """Response body for POST /files/import."""
 

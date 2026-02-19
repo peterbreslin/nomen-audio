@@ -125,13 +125,6 @@ pub fn run() {
                         .level(log::LevelFilter::Info)
                         .build(),
                 )?;
-                app.handle().plugin(
-                    tauri_plugin_mcp::init_with_config(
-                        tauri_plugin_mcp::PluginConfig::new("NomenAudio".to_string())
-                            .start_socket_server(true)
-                            .tcp("127.0.0.1".to_string(), 9876),
-                    ),
-                )?;
             }
 
             Ok(())

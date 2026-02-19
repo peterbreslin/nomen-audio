@@ -9,8 +9,8 @@ vi.mock('$lib/api/client', () => ({
 		library_template: '{Library}_{CatID}_{FXName}',
 		rename_on_save_default: true,
 		custom_fields: [
-			{ tag: 'MOOD', label: 'Mood', ai_prompt: null },
-			{ tag: 'INTENSITY', label: 'Intensity', ai_prompt: 'Rate intensity' }
+			{ tag: 'MOOD', label: 'Mood' },
+			{ tag: 'INTENSITY', label: 'Intensity' }
 		],
 		llm_provider: null,
 		llm_api_key: null
