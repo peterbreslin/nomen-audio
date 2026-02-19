@@ -161,4 +161,4 @@ nomen-audio/
 
 ## Architecture
 
-The frontend is a pure display layer — it never reads or writes files directly. All file I/O, metadata parsing, UCS lookups, and ML inference run inside the Python sidecar process. On startup the sidecar binds to a random localhost port, prints `PORT=<n>` to stdout, and Tauri reads that port to construct request URLs. HTTP/JSON over `127.0.0.1` is the only IPC channel. This keeps the Rust layer thin and makes the backend independently testable. See [`pipeline.md`](pipeline.md) for more details.
+The frontend is a pure display layer — it never reads or writes files directly. All file I/O, metadata parsing, UCS lookups, and ML inference run inside the Python sidecar process. On startup the sidecar binds to a random localhost port, prints `PORT=<n>` to stdout, and Tauri reads that port to construct request URLs. HTTP/JSON over `127.0.0.1` is the only IPC channel. This keeps the Rust layer thin and makes the backend independently testable. See [`architecture.md`](architecture.md) for more details.
