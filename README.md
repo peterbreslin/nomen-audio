@@ -4,7 +4,7 @@
 
 # Nomen Audio
 
-Windows desktop tool for sound designers to rename and re-tag audio assets to [UCS](https://universalcategorysystem.com/) (Universal Category System) standard.
+Windows desktop tool for sound designers to rename and re-tag audio assets to the [UCS](https://universalcategorysystem.com/) (Universal Category System) standard. See a video demonstration [here](https://youtu.be/ReToNGbxtVU).
 
 ## What It Does
 
