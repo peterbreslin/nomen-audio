@@ -144,15 +144,20 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Playwright
+.playwright
+
 # Claude
 .claude/
+CLAUDE.md
 
 # Misc — ignore all data/ contents except the UCS reference spreadsheets
 data/*
 !data/UCS/
 data/UCS/*
 !data/UCS/*.xlsx
-misc/
+state/
+dev/
 
 # Frontend
 frontend/node_modules/
