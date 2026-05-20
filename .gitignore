@@ -159,6 +159,7 @@ data/UCS/*
 state/
 dev/
 specs/
+scripts/
 
 # Frontend
 frontend/node_modules/
