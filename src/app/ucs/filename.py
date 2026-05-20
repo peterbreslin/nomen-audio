@@ -55,30 +55,31 @@ class GeneratedFilename:
 # ---------------------------------------------------------------------------
 
 _CAMEL_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+_TOKEN_RE = re.compile(r"[a-zA-Z0-9]+")
+
+
+def _tokenize_text(text: str) -> list[str]:
+    """Split arbitrary text into deduplicated lowercase tokens.
+
+    Splits on every non-alphanumeric character, so punctuation in metadata
+    fields (commas, colons, parentheses) does not produce noisy tokens.
+    """
+    text = _CAMEL_RE.sub("_", text)
+    seen: set[str] = set()
+    tokens: list[str] = []
+    for match in _TOKEN_RE.finditer(text):
+        low = match.group(0).lower()
+        if low not in seen:
+            seen.add(low)
+            tokens.append(low)
+    return tokens
 
 
 def _tokenize_filename(name: str) -> list[str]:
-    """Split filename into lowercase tokens, stripping extension."""
-    # Strip .wav extension
+    """Split filename into lowercase tokens, stripping .wav extension."""
     if name.lower().endswith(".wav"):
         name = name[:-4]
-
-    # Split camelCase boundaries
-    name = _CAMEL_RE.sub("_", name)
-
-    # Split on underscores, hyphens, spaces
-    parts = re.split(r"[_\-\s]+", name)
-
-    # Lowercase, deduplicate, filter empty
-    seen: set[str] = set()
-    tokens: list[str] = []
-    for p in parts:
-        low = p.lower()
-        if low and low not in seen:
-            seen.add(low)
-            tokens.append(low)
-
-    return tokens
+    return _tokenize_text(name)
 
 
 # ---------------------------------------------------------------------------
@@ -86,9 +87,24 @@ def _tokenize_filename(name: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def fuzzy_match(filename: str, top_n: int = 5) -> list[FuzzyMatch]:
-    """Score each CatID by synonym/name token overlap, return top-N."""
-    tokens = _tokenize_filename(filename)
+def fuzzy_match(
+    filename: str,
+    top_n: int = 5,
+    *,
+    extra_text: str | None = None,
+) -> list[FuzzyMatch]:
+    """Score each CatID by synonym/name token overlap, return top-N.
+
+    If ``extra_text`` is provided, its tokens are merged with the filename's
+    (deduped) before scoring. Used to feed embedded metadata into the boost.
+    """
+    tokens = list(_tokenize_filename(filename))
+    if extra_text:
+        seen = set(tokens)
+        for t in _tokenize_text(extra_text):
+            if t not in seen:
+                seen.add(t)
+                tokens.append(t)
     if not tokens:
         return []
 

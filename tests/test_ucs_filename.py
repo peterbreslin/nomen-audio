@@ -53,6 +53,14 @@ class TestTokenize:
         tokens = _tokenize_filename("door_door_open")
         assert tokens.count("door") == 1
 
+    def test_strips_punctuation(self):
+        """Metadata commonly carries commas, colons, parens — those should
+        not produce noisy tokens like 'glass,' or 'beep:'."""
+        tokens = _tokenize_filename("Chime, Twinkle, Sea, Glass, Movement.wav")
+        assert "glass" in tokens
+        assert "glass," not in tokens
+        assert "chime" in tokens
+
 
 # ---------------------------------------------------------------------------
 # Fuzzy matching
@@ -84,6 +92,17 @@ class TestFuzzyMatch:
         matches = fuzzy_match("wooden_door_creak.wav")
         scores = [m.score for m in matches]
         assert scores == sorted(scores, reverse=True)
+
+    def test_extra_text_adds_tokens(self):
+        """extra_text tokens contribute to scoring alongside filename tokens."""
+        no_extra = fuzzy_match("recording_01.wav", top_n=5)
+        with_extra = fuzzy_match(
+            "recording_01.wav",
+            top_n=5,
+            extra_text="wooden door creak",
+        )
+        assert "DOORWood" not in [m.cat_id for m in no_extra]
+        assert "DOORWood" in [m.cat_id for m in with_extra]
 
 
 # ---------------------------------------------------------------------------

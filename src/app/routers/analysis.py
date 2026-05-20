@@ -32,6 +32,7 @@ from app.models import (
     FileRecord,
 )
 from app.db.mappers import dict_to_file_record
+from app.metadata.reader import read_structured_metadata
 from app.ucs.filename import fuzzy_match
 
 logger = logging.getLogger(__name__)
@@ -145,8 +146,12 @@ def apply_filename_boost(
     classification: list[ClassificationMatch],
     filename: str | None,
     top_n: int = 5,
+    metadata: dict[str, str] | None = None,
 ) -> list[ClassificationMatch]:
-    """Re-rank classification results using filename keyword overlap (D056).
+    """Re-rank classification results using filename + metadata keyword overlap.
+
+    Originally D056 (filename-only). Phase 2 Path A extends the token pool with
+    embedded iXML/BEXT/INFO descriptive fields when ``metadata`` is supplied.
 
     Returns the top *top_n* results sorted by combined score. Confidences are
     renormalized to sum to ~1.0 for display purposes.
@@ -154,7 +159,8 @@ def apply_filename_boost(
     if not filename:
         return _renormalize_confidence(classification[:top_n])
 
-    matches = fuzzy_match(filename, top_n=50)
+    extra_text = " ".join(str(v) for v in metadata.values()) if metadata else None
+    matches = fuzzy_match(filename, top_n=50, extra_text=extra_text)
     if not matches or matches[0].score < _FILENAME_MIN_SCORE:
         return _renormalize_confidence(classification[:top_n])
 
@@ -209,13 +215,14 @@ async def _run_analysis(
 ) -> tuple[list[ClassificationMatch], str | None]:
     """Run classification (+ optional captioning), using cache when available.
 
-    The cache stores raw CLAP results (top _CLAP_CANDIDATES, no filename boost).
-    Filename keyword boost (D056) is always applied fresh so results reflect
-    the current filename even after renames.
+    The cache stores raw CLAP results (top _CLAP_CANDIDATES, no boost). The
+    filename + metadata boost is always applied fresh so results reflect the
+    current filename and embedded metadata even after renames or edits.
     """
     file_hash = row["file_hash"]
     file_path = row["path"]
     filename = row.get("filename")
+    metadata = read_structured_metadata(file_path)
 
     if not req.force:
         cached = await get_cached_analysis(file_hash)
@@ -224,7 +231,10 @@ async def _run_analysis(
                 ClassificationMatch(**m) for m in json.loads(cached["classification"])
             ]
             caption = cached.get("caption")
-            return apply_filename_boost(classification, filename), caption
+            return (
+                apply_filename_boost(classification, filename, metadata=metadata),
+                caption,
+            )
 
     classifier = model_manager.get_classifier()
     classification = await asyncio.to_thread(
@@ -236,11 +246,14 @@ async def _run_analysis(
         captioner = model_manager.get_captioner()
         caption = await asyncio.to_thread(captioner.caption, file_path)
 
-    # Cache raw CLAP results (without filename boost)
+    # Cache raw CLAP results (without boost)
     cls_json = json.dumps([m.model_dump() for m in classification])
     await store_cached_analysis(file_hash, cls_json, caption, "2023")
 
-    return apply_filename_boost(classification, filename), caption
+    return (
+        apply_filename_boost(classification, filename, metadata=metadata),
+        caption,
+    )
 
 
 async def _analyze_single_for_batch(row: dict, req: AnalyzeRequest) -> dict:

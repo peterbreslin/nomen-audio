@@ -9,7 +9,12 @@ from conftest import (
     write_wav,
 )
 
-from app.metadata.reader import compute_file_hash, read_metadata
+from app.metadata.reader import (
+    compute_file_hash,
+    extract_descriptive_fields,
+    extract_structured_fields,
+    read_metadata,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +252,60 @@ def test_read_metadata_aswg_creator_id_separate_from_originator(tmp_path):
 # ---------------------------------------------------------------------------
 # compute_file_hash
 # ---------------------------------------------------------------------------
+
+
+def test_extract_descriptive_fields_includes_free_form():
+    """Free-form fields (description, bext_description, info_comment) feed
+    the LLM prompt and must be in the descriptive subset."""
+    meta = {
+        "category": "Ambience",
+        "subcategory": "Underwater",
+        "description": "Hydrophone recording",
+        "library": "X",  # admin — excluded
+        "rating": 5,  # technical — excluded
+        "bext": {"description": "bext text"},
+        "info": {"title": "title", "comment": "comment", "genre": "Ambience"},
+    }
+    out = extract_descriptive_fields(meta)
+    assert out["category"] == "Ambience"
+    assert out["subcategory"] == "Underwater"
+    assert out["description"] == "Hydrophone recording"
+    assert out["bext_description"] == "bext text"
+    assert out["info_title"] == "title"
+    assert out["info_genre"] == "Ambience"
+    assert "rating" not in out
+
+
+def test_extract_structured_fields_excludes_free_form():
+    """Structured subset must omit free-form fields that mislead the keyword
+    boost (description, bext_description, info_comment, info_genre)."""
+    meta = {
+        "category": "Ambience",
+        "subcategory": "Underwater",
+        "keywords": "Iceland Glacier Underwater Ice",
+        "description": "Constant water flowing and occasional ice scrapes",
+        "bext": {"description": "tank rolling forward"},
+        "info": {"comment": "musical tonal", "genre": "MAGIC"},
+    }
+    out = extract_structured_fields(meta)
+    assert out == {
+        "category": "Ambience",
+        "subcategory": "Underwater",
+        "keywords": "Iceland Glacier Underwater Ice",
+    }
+
+
+def test_extract_structured_fields_empty_when_no_structured():
+    """Files with only free-form bext_description (the common legacy case)
+    yield no structured tokens — the boost falls back to filename-only."""
+    meta = {
+        "category": None,
+        "subcategory": None,
+        "keywords": None,
+        "bext": {"description": "75mm tank close shots"},
+    }
+    out = extract_structured_fields(meta)
+    assert out == {}
 
 
 def test_compute_file_hash_deterministic(tmp_path):

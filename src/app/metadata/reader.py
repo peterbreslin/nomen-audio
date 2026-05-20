@@ -83,6 +83,40 @@ METADATA_KEYS: list[str] = [
 
 _HASH_READ_SIZE = 4096
 
+# Descriptive iXML/USER/ASWG fields used for classification-time keyword signal.
+# Excludes technical, admin, and noise fields. Order is display order in prompts.
+_DESCRIPTIVE_IXML_FIELDS: tuple[str, ...] = (
+    "category",
+    "subcategory",
+    "cat_id",
+    "fx_name",
+    "description",
+    "keywords",
+    "notes",
+    "library",
+    "mic_perspective",
+)
+
+# Descriptive BEXT field; non-descriptive BEXT fields are technical noise.
+_DESCRIPTIVE_BEXT_FIELDS: dict[str, str] = {"description": "bext_description"}
+
+# Descriptive INFO sub-chunk fields with friendly display labels.
+_DESCRIPTIVE_INFO_FIELDS: dict[str, str] = {
+    "title": "info_title",
+    "comment": "info_comment",
+    "genre": "info_genre",
+}
+
+# Structured taxonomy fields used to feed the filename keyword boost. Free-form
+# fields (description, bext_description, info_comment, info_genre) are excluded
+# because their token noise (e.g. "tank" in a cannon description, "water flowing"
+# in a glacier description) routes the boost to cousin CatIDs. See Phase 2 eval.
+_STRUCTURED_IXML_FIELDS: tuple[str, ...] = (
+    "category",
+    "subcategory",
+    "keywords",
+)
+
 
 def read_metadata(path: str) -> dict[str, Any]:
     """Read all metadata from a WAV file into a flat dict.
@@ -105,6 +139,77 @@ def read_metadata(path: str) -> dict[str, Any]:
         result["custom_fields"] = ixml_fields["custom_fields"]
 
     return result
+
+
+def extract_descriptive_fields(meta: dict[str, Any]) -> dict[str, str]:
+    """Filter a full metadata dict down to non-empty descriptive fields.
+
+    Returns a flat dict in stable display order. Used by classification-time
+    keyword boost and the LLM prompt builder, which share the same descriptive
+    subset (iXML USER/ASWG, BEXT description, INFO title/comment/genre).
+    """
+    out: dict[str, str] = {}
+    for key in _DESCRIPTIVE_IXML_FIELDS:
+        value = meta.get(key)
+        if value:
+            out[key] = str(value).strip()
+
+    bext = meta.get("bext") or {}
+    for source_key, display_key in _DESCRIPTIVE_BEXT_FIELDS.items():
+        value = bext.get(source_key)
+        if value:
+            out[display_key] = str(value).strip()
+
+    info = meta.get("info") or {}
+    for source_key, display_key in _DESCRIPTIVE_INFO_FIELDS.items():
+        value = info.get(source_key)
+        if value:
+            out[display_key] = str(value).strip()
+
+    return {k: v for k, v in out.items() if v}
+
+
+def read_descriptive_metadata(path: str) -> dict[str, str]:
+    """Read a WAV and return only non-empty descriptive metadata fields.
+
+    Returns {} on any read error; legacy WAVs without metadata chunks are common
+    and should not crash the pipeline.
+    """
+    try:
+        meta = read_metadata(path)
+    except Exception:
+        logger.exception("Failed to read metadata for %s", path)
+        return {}
+    return extract_descriptive_fields(meta)
+
+
+def extract_structured_fields(meta: dict[str, Any]) -> dict[str, str]:
+    """Filter a metadata dict to non-empty structured taxonomy fields.
+
+    Narrower than ``extract_descriptive_fields``: keeps only fields where the
+    text is a structured tag list (category, subcategory, keywords) rather
+    than free-form prose. Used by the filename keyword boost where free-form
+    descriptions add more noise than signal.
+    """
+    out: dict[str, str] = {}
+    for key in _STRUCTURED_IXML_FIELDS:
+        value = meta.get(key)
+        if value:
+            out[key] = str(value).strip()
+    return {k: v for k, v in out.items() if v}
+
+
+def read_structured_metadata(path: str) -> dict[str, str]:
+    """Read a WAV and return only non-empty structured taxonomy fields.
+
+    Used by the classification-time keyword boost. Returns {} on any read error.
+    """
+    try:
+        meta = read_metadata(path)
+    except Exception:
+        logger.exception("Failed to read metadata for %s", path)
+        return {}
+    return extract_structured_fields(meta)
 
 
 def compute_file_hash(path: str) -> str:

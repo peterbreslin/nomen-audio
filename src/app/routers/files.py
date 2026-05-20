@@ -33,7 +33,11 @@ from app.db.repository import (
     update_file,
     upsert_file,
 )
-from app.metadata.reader import compute_file_hash, read_metadata
+from app.metadata.reader import (
+    compute_file_hash,
+    extract_structured_fields,
+    read_metadata,
+)
 from app.metadata.writer import verify_write, write_metadata
 from app.models import (
     AnalysisResult,
@@ -547,19 +551,22 @@ async def _import_single_file(wav_path: Path, abs_path: str) -> FileRecord:
     # Pre-populate analysis from cache if previously analyzed
     cached = await get_cached_analysis(file_hash)
     if cached is not None:
-        _inject_cached_analysis(db_record, cached, wav_path.name)
+        _inject_cached_analysis(db_record, cached, wav_path.name, meta)
 
     file_id = await upsert_file(db_record)
     db_record["id"] = file_id
     return hydrate_suggestions(dict_to_file_record(db_record))
 
 
-def _inject_cached_analysis(db_record: dict, cached: dict, filename: str) -> None:
+def _inject_cached_analysis(
+    db_record: dict, cached: dict, filename: str, meta: dict
+) -> None:
     """Inject cached analysis results into a new file record (mutates db_record)."""
     classification = [
         ClassificationMatch(**m) for m in json.loads(cached["classification"])
     ]
-    boosted = apply_filename_boost(classification, filename)
+    structured = extract_structured_fields(meta)
+    boosted = apply_filename_boost(classification, filename, metadata=structured)
     caption = cached.get("caption")
     analysis = AnalysisResult(
         classification=boosted,
