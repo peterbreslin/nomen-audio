@@ -1,8 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { open } from '@tauri-apps/plugin-dialog';
-	import { getCurrentWebview } from '@tauri-apps/api/webview';
-	import { getCurrentWindow } from '@tauri-apps/api/window';
+	import { open, getCurrentWebview, getCurrentWindow } from '$lib/tauri-shim';
 	import Toolbar from '$lib/components/Toolbar.svelte';
 	import StatusBar from '$lib/components/StatusBar.svelte';
 	import Sidebar from '$lib/components/sidebar/Sidebar.svelte';
