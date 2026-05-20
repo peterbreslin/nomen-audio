@@ -222,7 +222,7 @@ class FileStore {
 	}
 
 	/** Optimistic local field update — mark file modified + add to changed_fields */
-	updateFieldLocally(id: string, key: string, value: string | null) {
+	updateFieldLocally(id: string, key: string, value: string | null | Record<string, string>) {
 		const file = this.files.get(id);
 		if (!file) return;
 		const changed = new Set(file.changed_fields);
