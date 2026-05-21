@@ -5,6 +5,7 @@ import os
 import threading
 
 from app import paths
+from app.llm.ollama_provider import OllamaProvider
 from app.ml.captioner import CLAPCaptioner
 from app.ml.classifier import CLAPClassifier
 
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 _classifier: CLAPClassifier | None = None
 _captioner: CLAPCaptioner | None = None
+_llm_provider: OllamaProvider | None = None
 _loading: bool = False
 _ready: bool = False
 _error: str | None = None
@@ -71,6 +73,36 @@ def get_captioner() -> CLAPCaptioner:
             _captioner.load_model()
             logger.info("CLAPCaptioner lazy-loaded")
     return _captioner
+
+
+def get_llm_provider() -> OllamaProvider | None:
+    """Lazy-construct and return the Ollama-backed LLM rerank provider.
+
+    Returns None when settings disable rerank or the daemon is unreachable.
+    Callers treat this as a soft failure and fall back to CLAP + boost.
+    """
+    from app.services.settings import get_settings
+
+    settings = get_settings()
+    global _llm_provider
+    with _lock:
+        if _llm_provider is not None:
+            return _llm_provider
+        provider = OllamaProvider(
+            model=settings.llm_ollama_model,
+            base_url=settings.llm_ollama_base_url,
+        )
+        if not provider.is_reachable():
+            logger.info(
+                "Ollama daemon not reachable at %s; rerank disabled",
+                settings.llm_ollama_base_url,
+            )
+            return None
+        _llm_provider = provider
+        logger.info(
+            "OllamaProvider ready (model=%s)", settings.llm_ollama_model
+        )
+        return _llm_provider
 
 
 def is_ready() -> bool:
