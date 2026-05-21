@@ -309,3 +309,66 @@ async def clear_analysis_cache() -> None:
     db = get_db()
     await db.execute("DELETE FROM analysis_cache")
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# LLM rerank cache
+# ---------------------------------------------------------------------------
+
+
+async def get_cached_llm_pick(
+    file_hash: str, prompt_version: str, model_version: str
+) -> dict | None:
+    """Return a cached LLM rerank result, or None if no entry matches.
+
+    Cache key is the triple (file_hash, prompt_version, model_version). A
+    rename that preserves the audio data does not bust the cache; a prompt
+    or model swap does.
+    """
+    db = get_db()
+    cursor = await db.execute(
+        "SELECT * FROM llm_cache WHERE file_hash = ? AND prompt_version = ? "
+        "AND model_version = ?",
+        (file_hash, prompt_version, model_version),
+    )
+    row = await cursor.fetchone()
+    return dict(row) if row else None
+
+
+async def store_cached_llm_pick(
+    *,
+    file_hash: str,
+    prompt_version: str,
+    model_version: str,
+    chosen_cat_id: str,
+    retried: bool,
+    fallback_to_clap_top1: bool,
+    latency_ms: int,
+) -> None:
+    """Insert or replace a cached LLM rerank result."""
+    db = get_db()
+    now = datetime.now(timezone.utc).isoformat()
+    await db.execute(
+        "INSERT OR REPLACE INTO llm_cache "
+        "(file_hash, prompt_version, model_version, chosen_cat_id, retried, "
+        "fallback_to_clap_top1, latency_ms, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            file_hash,
+            prompt_version,
+            model_version,
+            chosen_cat_id,
+            int(retried),
+            int(fallback_to_clap_top1),
+            latency_ms,
+            now,
+        ),
+    )
+    await db.commit()
+
+
+async def clear_llm_cache() -> None:
+    """Delete all cached LLM rerank results."""
+    db = get_db()
+    await db.execute("DELETE FROM llm_cache")
+    await db.commit()
