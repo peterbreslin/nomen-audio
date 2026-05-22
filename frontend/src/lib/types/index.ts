@@ -75,6 +75,8 @@ export interface ModelsStatus {
 	loading: boolean;
 	error: string | null;
 	status_message: string;
+	llm_rerank_enabled: boolean;
+	llm_provider_reachable: boolean;
 }
 
 export interface AnalyzeRequest {
@@ -271,4 +273,7 @@ export interface AppSettings {
 	llm_provider: string | null;
 	llm_api_key: string | null;
 	model_directory: string;
+	llm_rerank_enabled: boolean;
+	llm_ollama_model: string;
+	llm_ollama_base_url: string;
 }

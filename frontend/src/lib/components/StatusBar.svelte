@@ -25,9 +25,24 @@
 			phrase = '';
 		}
 	});
+
+	let rerankPill = $derived.by(() => {
+		const state = modelsStore.llmRerankState;
+		if (state === 'on') {
+			return { dot: 'bg-green-500', text: 'LLM rerank: on', tone: 'opacity-70' };
+		}
+		if (state === 'unreachable') {
+			return {
+				dot: 'bg-amber-500',
+				text: 'LLM rerank: Ollama unreachable',
+				tone: 'text-amber-500'
+			};
+		}
+		return { dot: 'bg-muted-foreground/40', text: 'LLM rerank: off', tone: 'opacity-50' };
+	});
 </script>
 
-<footer class="flex h-6 items-center border-t border-[var(--border-default)] bg-[var(--bg-surface)] px-3 font-mono text-[10px] text-[var(--text-muted)]">
+<footer class="flex h-6 items-center gap-3 border-t border-[var(--border-default)] bg-[var(--bg-surface)] px-3 font-mono text-[10px] text-[var(--text-muted)]">
 	<span>
 		{fileStore.fileStats.total} files
 		{#if fileStore.selectedFileIds.size > 0}
@@ -40,4 +55,10 @@
 	<span class="ml-auto truncate text-[var(--tech-gold)]">
 		{phrase}
 	</span>
+	{#if modelsStore.status}
+		<span class="flex shrink-0 items-center gap-1.5 {rerankPill.tone}" title={rerankPill.text}>
+			<span class="inline-block h-1.5 w-1.5 rounded-full {rerankPill.dot}"></span>
+			{rerankPill.text}
+		</span>
+	{/if}
 </footer>

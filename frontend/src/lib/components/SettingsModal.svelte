@@ -47,6 +47,7 @@
 	let renameOnSave = $state(true);
 	let llmProvider = $state('__none__');
 	let llmApiKey = $state('');
+	let llmRerankEnabled = $state(true);
 	let customFields = $state<CustomFieldDef[]>([]);
 	let showApiKey = $state(false);
 	let saving = $state(false);
@@ -63,6 +64,7 @@
 			renameOnSave = s.rename_on_save_default;
 			llmProvider = s.llm_provider ?? '__none__';
 			llmApiKey = '';
+			llmRerankEnabled = s.llm_rerank_enabled;
 			customFields = s.custom_fields.map((f) => ({ ...f }));
 			showApiKey = false;
 			tagErrors = {};
@@ -109,6 +111,7 @@
 				library_template: libraryTemplate,
 				rename_on_save_default: renameOnSave,
 				llm_provider: llmProvider === '__none__' ? null : llmProvider,
+				llm_rerank_enabled: llmRerankEnabled,
 				custom_fields: customFields
 			};
 			if (llmApiKey) {
@@ -143,6 +146,21 @@
 	let providerLabel = $derived(
 		LLM_OPTIONS.find((o) => o.value === llmProvider)?.label ?? 'None'
 	);
+
+	let rerankDotClass = $derived(
+		modelsStore.llmRerankState === 'on'
+			? 'bg-green-500'
+			: modelsStore.llmRerankState === 'unreachable'
+				? 'bg-amber-500'
+				: 'bg-muted-foreground/30'
+	);
+
+	let rerankLabel = $derived.by(() => {
+		const state = modelsStore.llmRerankState;
+		if (state === 'on') return 'LLM Rerank';
+		if (state === 'unreachable') return 'LLM Rerank (Ollama unreachable)';
+		return 'LLM Rerank (off)';
+	});
 </script>
 
 <Dialog.Root bind:open>
@@ -193,6 +211,13 @@
 						AI Features
 					</h3>
 					<div class="grid grid-cols-[120px_1fr] items-center gap-x-3 gap-y-2">
+						<label for="s-rerank" class="text-sm text-muted-foreground">LLM Rerank</label>
+						<div class="flex items-center gap-2">
+							<Switch id="s-rerank" checked={llmRerankEnabled} onCheckedChange={(v) => { llmRerankEnabled = v; }} />
+							<span class="text-xs text-muted-foreground/70">
+								Local Ollama ({settingsStore.settings?.llm_ollama_model ?? 'ministral-3:3b'})
+							</span>
+						</div>
 						<span class="text-sm text-muted-foreground">LLM Provider</span>
 						<Select.Root type="single" value={llmProvider} onValueChange={(v) => { llmProvider = v; }}>
 							<Select.Trigger class="h-9 w-full text-sm">
@@ -314,7 +339,7 @@
 						</Popover.Root>
 					</div>
 					{#if modelsStore.status}
-						<div class="flex items-center gap-4">
+						<div class="flex flex-wrap items-center gap-x-4 gap-y-1.5">
 							<div class="flex items-center gap-1.5">
 								<span class="inline-block h-2 w-2 rounded-full {modelsStore.status.clap_loaded ? 'bg-green-500' : 'bg-red-500'}"></span>
 								<span class="text-xs text-muted-foreground">CLAP</span>
@@ -324,6 +349,10 @@
 								<span class="text-xs text-muted-foreground">
 									ClapCap{#if !modelsStore.status.clapcap_loaded}&nbsp;<span class="text-muted-foreground/50">(on demand)</span>{/if}
 								</span>
+							</div>
+							<div class="flex items-center gap-1.5">
+								<span class="inline-block h-2 w-2 rounded-full {rerankDotClass}"></span>
+								<span class="text-xs text-muted-foreground">{rerankLabel}</span>
 							</div>
 						</div>
 					{/if}
