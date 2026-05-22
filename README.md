@@ -10,7 +10,7 @@ Windows desktop tool for sound designers to rename and re-tag audio assets to th
 
 Professional audio libraries often differ in metadata and naming convention across different libraries and projects. As a sound designer working with many audio libraries, this means that finding the right sounds can be very time consuming and tedious, especially if assets are poorly named or if certain metadata simply doesn't exist. The [Universal Category System (UCS)](https://universalcategorysystem.com/) helps solve this issue, but applying it to existing libraries is a very manual, file-by-file process.
 
-Nomen Audio addresses this issue by providing an automated way to standardize audio assets to the UCS convention. The application imports audio assets (`.wav`) and their embedded metadata (iXML, BEXT, RIFF INFO chunks), and a machine learning backed pipeline infers each file's UCS category, subcategory, and description. Addiitonal matadata fields are also generated, and the user may review every suggestion, edit fields freely in-place, or write additional metadata tags. Nothing touches disk until the user explicitly saves - the assets are then atomically renamed and metadata written. See [`docs/pipeline.md`](docs/pipeline.md) for more details.
+Nomen Audio addresses this issue by providing an automated way to standardize audio assets to the UCS convention. The application imports audio assets (`.wav`) and their embedded metadata (iXML, BEXT, RIFF INFO chunks), and a machine learning backed pipeline (CLAP for retrieval, a small local LLM for the final pick) infers each file's UCS category, subcategory, and description. Additional metadata fields are also generated, and the user may review every suggestion, edit fields freely in-place, or write additional metadata tags. Nothing touches disk until the user explicitly saves - the assets are then atomically renamed and metadata written. See [`docs/pipeline.md`](docs/pipeline.md) for more details.
 
 ## Features
 
@@ -107,7 +107,10 @@ cd frontend
 npm install
 ```
 
-> **UCS data**: The `data/UCS/` directory (committed in repo) must contain the UCS 8.2.1 spreadsheet, downloaded free from [universalcategorysystem.com](https://universalcategorysystem.com/). Place the `.xlsx` file at `data/UCS/UCS Master List V8.2.1.xlsx`.
+> **UCS data**: The `data/UCS/` directory must contain both UCS 8.2.1 spreadsheets, downloaded free from [universalcategorysystem.com](https://universalcategorysystem.com/):
+> - `data/UCS/UCS v8.2.1 Full List.xlsx` (all 753 subcategories with explanations and synonyms)
+> - `data/UCS/UCS v8.2.1 Top Level Categories.xlsx` (the 49 top-level categories)
+> Filenames must match exactly — the sidecar looks for these literal names at startup.
 
 ### Run in Dev Mode
 
@@ -170,8 +173,9 @@ nomen-audio/
 | Database             | SQLite (via `sqlite3` stdlib)                                                                    |
 | Audio classification | [MS-CLAP](https://github.com/microsoft/CLAP) (zero-shot, CPU-only)                               |
 | Captioning           | [ClapCap](https://github.com/prompteus/clapgrep) (audio → natural-language description)          |
+| LLM rerank           | [Ollama](https://ollama.com/) (local HTTP) + `ministral-3:3b` (JSON-mode, default-on, optional)  |
 | WAV I/O              | Custom RIFF writer (atomic, chunk-preserving) + [wavinfo](https://github.com/iluvcapra/wavinfo)  |
 
 ## Architecture
 
-The frontend is a pure display layer — it never reads or writes files directly. All file I/O, metadata parsing, UCS lookups, and ML inference run inside the Python sidecar process. On startup the sidecar binds to a random localhost port, prints `PORT=<n>` to stdout, and Tauri reads that port to construct request URLs. HTTP/JSON over `127.0.0.1` is the only IPC channel. This keeps the Rust layer thin and makes the backend independently testable. See [`docs/architecture.md`](docs/architecture.md) for more details.
+The frontend is a pure display layer — it never reads or writes files directly. All file I/O, metadata parsing, UCS lookups, and ML inference run inside the Python sidecar process. The sidecar also talks to a local Ollama daemon (HTTP, `127.0.0.1:11434`) for the LLM rerank step; if Ollama is unreachable or rerank is disabled, classification falls back to CLAP plus filename and metadata boost without user-visible failure. On startup the sidecar binds to a random localhost port, prints `PORT=<n>` to stdout, and Tauri reads that port to construct request URLs. HTTP/JSON over `127.0.0.1` is the only IPC channel. This keeps the Rust layer thin and makes the backend independently testable. See [`docs/architecture.md`](docs/architecture.md) for more details.
