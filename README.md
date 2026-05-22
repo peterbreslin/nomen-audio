@@ -10,7 +10,7 @@ Windows desktop tool for sound designers to rename and re-tag audio assets to th
 
 Professional audio libraries often differ in metadata and naming convention across different libraries and projects. As a sound designer working with many audio libraries, this means that finding the right sounds can be very time consuming and tedious, especially if assets are poorly named or if certain metadata simply doesn't exist. The [Universal Category System (UCS)](https://universalcategorysystem.com/) helps solve this issue, but applying it to existing libraries is a very manual, file-by-file process.
 
-Nomen Audio addresses this issue by providing an automated way to standardize audio assets to the UCS convention. The application imports audio assets (`.wav`) and their embedded metadata (iXML, BEXT, RIFF INFO chunks), and a machine learning backed pipeline infers each file's UCS category, subcategory, and description. Addiitonal matadata fields are also generated, and the user may review every suggestion, edit fields freely in-place, or write additional metadata tags. Nothing touches disk until the user explicitly saves - the assets are then atomically renamed and metadata written. See [`pipeline.md`](pipeline.md) for more details.
+Nomen Audio addresses this issue by providing an automated way to standardize audio assets to the UCS convention. The application imports audio assets (`.wav`) and their embedded metadata (iXML, BEXT, RIFF INFO chunks), and a machine learning backed pipeline (CLAP for retrieval, a small local LLM for the final pick) infers each file's UCS category, subcategory, and description. Additional metadata fields are also generated, and the user may review every suggestion, edit fields freely in-place, or write additional metadata tags. Nothing touches disk until the user explicitly saves - the assets are then atomically renamed and metadata written. See [`docs/pipeline.md`](docs/pipeline.md) for more details.
 
 ## Features
 
@@ -18,10 +18,10 @@ Nomen Audio addresses this issue by providing an automated way to standardize au
 | ---------------------------------------------------------- | ----------------------------------------------------------------- |
 | Import any folder of WAV files                             | MS-CLAP zero-shot classification → top-N UCS category suggestions |
 | Spreadsheet editor — 20+ columns, inline editing           | ClapCap natural-language description generation                   |
-| UCS cascading dropdowns (753 subcategories, 49 categories) | SSE streaming batch analysis with per-file progress               |
-| iXML / BEXT / RIFF INFO round-trip read + write            | All suggestions are proposals — nothing written until user saves  |
-| Waveform player (wavesurfer.js)                            | Confidence-ranked suggestions with one-click accept               |
-| File tree sidebar with search                              |                                                                   |
+| UCS cascading dropdowns (753 subcategories, 49 categories) | Local LLM rerank (Ollama + `ministral-3:3b`) for higher top-1     |
+| iXML / BEXT / RIFF INFO round-trip read + write            | SSE streaming batch analysis with per-file progress               |
+| Waveform player (wavesurfer.js)                            | All suggestions are proposals — nothing written until user saves  |
+| File tree sidebar with search                              | Confidence-ranked suggestions with one-click accept               |
 | Batch save / revert / find & replace                       |                                                                   |
 | Atomic rename: original untouched on error                 |                                                                   |
 
@@ -64,11 +64,23 @@ Model weights are **not bundled** in the installer and download automatically on
 | MS-CLAP 2023 (classifier)      | ~660 MB | Background, on every first launch                        |
 | ClapCap + GPT-2 (descriptions) | ~2.1 GB | On first click of **Generate** with descriptions enabled |
 
-**Total on first full use: ~2.8 GB.** Subsequent launches use cached weights — no download.
+**Total on first full use: ~2.8 GB.** Subsequent launches use cached weights, no download.
 
 Weights are stored in the standard Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`.
 
 > For full troubleshooting steps (antivirus, proxy, slow first analysis), see [`docs/installation.md`](docs/installation.md).
+
+### Step 5 — LLM rerank (recommended)
+
+The classifier ships with an optional LLM rerank step that turns CLAP's top 10 candidates into a single high quality choice. On the 41 file evaluation set this lifts top 1 accuracy from 12/41 (CLAP alone) to 27/41. The rerank runs locally via [Ollama](https://ollama.com/) with the `ministral-3:3b` model (2.95 GB, GPU accelerated on supported hardware, around 1.3 seconds per file).
+
+1. Install Ollama from [ollama.com/download](https://ollama.com/download).
+2. Pull the model: `ollama pull ministral-3:3b`.
+3. Make sure the Ollama daemon is running (it starts automatically on Windows after install).
+
+Nomen Audio enables rerank by default and looks for Ollama at `http://localhost:11434`. If the daemon is unreachable or the model is missing, classification silently falls back to CLAP plus filename boost. You can disable rerank entirely in the settings modal.
+
+To use a different model or daemon URL, edit `llm_ollama_model` and `llm_ollama_base_url` in `%APPDATA%\NomenAudio\settings.json`.
 
 ## Development Setup
 
@@ -79,6 +91,7 @@ Weights are stored in the standard Hugging Face cache at `%USERPROFILE%\.cache\h
 - [Node.js](https://nodejs.org/) ≥ 20
 - [Rust stable](https://rustup.rs/) + `cargo`
 - [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ workload, required by Tauri)
+- [Ollama](https://ollama.com/) with `ministral-3:3b` pulled (powers the LLM rerank step; the app still runs without it but rerank is disabled)
 
 ### Steps
 
@@ -94,7 +107,10 @@ cd frontend
 npm install
 ```
 
-> **UCS data**: The `data/UCS/` directory (committed in repo) must contain the UCS 8.2.1 spreadsheet, downloaded free from [universalcategorysystem.com](https://universalcategorysystem.com/). Place the `.xlsx` file at `data/UCS/UCS Master List V8.2.1.xlsx`.
+> **UCS data**: The `data/UCS/` directory must contain both UCS 8.2.1 spreadsheets, downloaded free from [universalcategorysystem.com](https://universalcategorysystem.com/):
+> - `data/UCS/UCS v8.2.1 Full List.xlsx` (all 753 subcategories with explanations and synonyms)
+> - `data/UCS/UCS v8.2.1 Top Level Categories.xlsx` (the 49 top-level categories)
+> Filenames must match exactly — the sidecar looks for these literal names at startup.
 
 ### Run in Dev Mode
 
@@ -157,8 +173,9 @@ nomen-audio/
 | Database             | SQLite (via `sqlite3` stdlib)                                                                    |
 | Audio classification | [MS-CLAP](https://github.com/microsoft/CLAP) (zero-shot, CPU-only)                               |
 | Captioning           | [ClapCap](https://github.com/prompteus/clapgrep) (audio → natural-language description)          |
+| LLM rerank           | [Ollama](https://ollama.com/) (local HTTP) + `ministral-3:3b` (JSON-mode, default-on, optional)  |
 | WAV I/O              | Custom RIFF writer (atomic, chunk-preserving) + [wavinfo](https://github.com/iluvcapra/wavinfo)  |
 
 ## Architecture
 
-The frontend is a pure display layer — it never reads or writes files directly. All file I/O, metadata parsing, UCS lookups, and ML inference run inside the Python sidecar process. On startup the sidecar binds to a random localhost port, prints `PORT=<n>` to stdout, and Tauri reads that port to construct request URLs. HTTP/JSON over `127.0.0.1` is the only IPC channel. This keeps the Rust layer thin and makes the backend independently testable. See [`architecture.md`](architecture.md) for more details.
+The frontend is a pure display layer — it never reads or writes files directly. All file I/O, metadata parsing, UCS lookups, and ML inference run inside the Python sidecar process. The sidecar also talks to a local Ollama daemon (HTTP, `127.0.0.1:11434`) for the LLM rerank step; if Ollama is unreachable or rerank is disabled, classification falls back to CLAP plus filename and metadata boost without user-visible failure. On startup the sidecar binds to a random localhost port, prints `PORT=<n>` to stdout, and Tauri reads that port to construct request URLs. HTTP/JSON over `127.0.0.1` is the only IPC channel. This keeps the Rust layer thin and makes the backend independently testable. See [`docs/architecture.md`](docs/architecture.md) for more details.

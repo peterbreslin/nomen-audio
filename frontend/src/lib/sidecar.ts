@@ -1,5 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
-import { fetch as tauriFetch } from '@tauri-apps/plugin-http';
+import { invoke, fetch as tauriFetch } from '$lib/tauri-shim';
 
 let cachedPort: number | null = null;
 

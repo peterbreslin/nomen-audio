@@ -422,6 +422,56 @@ def test_renormalize_no_keyword():
     assert result[0].cat_id == "CAT0"
 
 
+def test_filename_boost_passes_metadata_text_to_fuzzy_match():
+    """When metadata is supplied, its values are forwarded to fuzzy_match as
+    extra_text so iXML/BEXT/INFO tokens can pull candidates into the boost pool.
+    """
+    matches = _make_matches(10)
+    mock_fuzzy = [
+        FuzzyMatch(
+            cat_id="CAT3",
+            category="X",
+            subcategory="Y",
+            score=3,
+            matched_terms=["a", "b", "c"],
+        ),
+    ]
+    with patch(
+        "app.routers.analysis.fuzzy_match", return_value=mock_fuzzy
+    ) as mock_call:
+        apply_filename_boost(
+            matches,
+            "foo.wav",
+            top_n=5,
+            metadata={"subcategory": "Savanna", "description": "hyenas calling"},
+        )
+
+    args, kwargs = mock_call.call_args
+    assert args[0] == "foo.wav"
+    assert kwargs.get("extra_text") == "Savanna hyenas calling"
+
+
+def test_filename_boost_metadata_none_matches_legacy_behaviour():
+    """metadata=None must be indistinguishable from omitting the argument."""
+    matches = _make_matches(10)
+    mock_fuzzy = [
+        FuzzyMatch(
+            cat_id="CAT2",
+            category="X",
+            subcategory="Y",
+            score=2,
+            matched_terms=["a", "b"],
+        ),
+    ]
+    with patch(
+        "app.routers.analysis.fuzzy_match", return_value=mock_fuzzy
+    ) as mock_call:
+        apply_filename_boost(matches, "foo.wav", top_n=5, metadata=None)
+
+    kwargs = mock_call.call_args.kwargs
+    assert kwargs.get("extra_text") is None
+
+
 def test_blend_confidence_boosts_keyword_match():
     """Keyword-boosted item gets highest blended confidence."""
     # Realistic softmax-like confidences (small, close together)

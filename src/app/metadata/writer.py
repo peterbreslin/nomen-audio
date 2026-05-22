@@ -805,7 +805,9 @@ def _verify_ixml(root: ET.Element | None, metadata: dict, errors: list[str]) -> 
         el = user.find(tag) if user is not None else None
         actual = el.text if el is not None else None
         if actual != expected:
-            errors.append(f"Custom field <{tag}>: expected '{expected}', got '{actual}'")
+            errors.append(
+                f"Custom field <{tag}>: expected '{expected}', got '{actual}'"
+            )
 
 
 # Reverse of ASWG_KEY_MAP: ASWG tag → metadata dict key (for verify)

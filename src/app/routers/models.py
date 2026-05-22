@@ -19,6 +19,8 @@ class ModelStatusResponse(BaseModel):
     loading: bool
     error: str | None
     status_message: str
+    llm_rerank_enabled: bool
+    llm_provider_reachable: bool
 
 
 @router.get("/status", response_model=ModelStatusResponse)

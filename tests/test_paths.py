@@ -69,7 +69,10 @@ def test_get_db_path_frozen():
         patch("os.makedirs"),
     ):
         paths.init()
-        assert paths.get_db_path() == r"C:\Users\TestUser\AppData\Roaming\NomenAudio\nomen.db"
+        assert (
+            paths.get_db_path()
+            == r"C:\Users\TestUser\AppData\Roaming\NomenAudio\nomen.db"
+        )
 
 
 def test_get_settings_path_dev():
@@ -89,7 +92,10 @@ def test_get_settings_path_frozen():
         patch("os.makedirs"),
     ):
         paths.init()
-        assert paths.get_settings_path() == r"C:\Users\TestUser\AppData\Roaming\NomenAudio\settings.json"
+        assert (
+            paths.get_settings_path()
+            == r"C:\Users\TestUser\AppData\Roaming\NomenAudio\settings.json"
+        )
 
 
 def test_get_cache_dir_dev():
@@ -109,7 +115,10 @@ def test_get_cache_dir_frozen():
         patch("os.makedirs"),
     ):
         paths.init()
-        assert paths.get_cache_dir() == r"C:\Users\TestUser\AppData\Roaming\NomenAudio\cache"
+        assert (
+            paths.get_cache_dir()
+            == r"C:\Users\TestUser\AppData\Roaming\NomenAudio\cache"
+        )
 
 
 def test_get_ucs_full_list_dev():

@@ -58,10 +58,26 @@ CREATE TABLE IF NOT EXISTS analysis_cache (
 );
 """
 
+LLM_CACHE_DDL = """
+CREATE TABLE IF NOT EXISTS llm_cache (
+    file_hash TEXT NOT NULL,
+    prompt_version TEXT NOT NULL,
+    model_version TEXT NOT NULL,
+    chosen_cat_id TEXT NOT NULL,
+    retried INTEGER NOT NULL DEFAULT 0,
+    fallback_to_clap_top1 INTEGER NOT NULL DEFAULT 0,
+    latency_ms INTEGER,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (file_hash, prompt_version, model_version)
+);
+"""
+
 
 async def init_db(db: aiosqlite.Connection) -> None:
     """Create tables and indexes, then run migrations."""
-    await db.executescript(FILES_DDL + FILES_INDEX_DDL + ANALYSIS_CACHE_DDL)
+    await db.executescript(
+        FILES_DDL + FILES_INDEX_DDL + ANALYSIS_CACHE_DDL + LLM_CACHE_DDL
+    )
     await db.commit()
     await _migrate_custom_fields(db)
     await _migrate_analysis_column(db)

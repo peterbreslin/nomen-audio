@@ -16,8 +16,10 @@ from app.errors import AppError, FILE_NOT_FOUND, MODEL_NOT_READY
 from app.db.repository import (
     get_all_files,
     get_cached_analysis,
+    get_cached_llm_pick,
     get_file,
     store_cached_analysis,
+    store_cached_llm_pick,
     update_file,
 )
 from app.ml import model_manager
@@ -32,6 +34,8 @@ from app.models import (
     FileRecord,
 )
 from app.db.mappers import dict_to_file_record
+from app.llm.prompt_renderer import load_prompt
+from app.metadata.reader import read_descriptive_metadata, read_structured_metadata
 from app.ucs.filename import fuzzy_match
 
 logger = logging.getLogger(__name__)
@@ -145,8 +149,12 @@ def apply_filename_boost(
     classification: list[ClassificationMatch],
     filename: str | None,
     top_n: int = 5,
+    metadata: dict[str, str] | None = None,
 ) -> list[ClassificationMatch]:
-    """Re-rank classification results using filename keyword overlap (D056).
+    """Re-rank classification results using filename + metadata keyword overlap.
+
+    Originally D056 (filename-only). Phase 2 Path A extends the token pool with
+    embedded iXML/BEXT/INFO descriptive fields when ``metadata`` is supplied.
 
     Returns the top *top_n* results sorted by combined score. Confidences are
     renormalized to sum to ~1.0 for display purposes.
@@ -154,7 +162,8 @@ def apply_filename_boost(
     if not filename:
         return _renormalize_confidence(classification[:top_n])
 
-    matches = fuzzy_match(filename, top_n=50)
+    extra_text = " ".join(str(v) for v in metadata.values()) if metadata else None
+    matches = fuzzy_match(filename, top_n=50, extra_text=extra_text)
     if not matches or matches[0].score < _FILENAME_MIN_SCORE:
         return _renormalize_confidence(classification[:top_n])
 
@@ -209,38 +218,116 @@ async def _run_analysis(
 ) -> tuple[list[ClassificationMatch], str | None]:
     """Run classification (+ optional captioning), using cache when available.
 
-    The cache stores raw CLAP results (top _CLAP_CANDIDATES, no filename boost).
-    Filename keyword boost (D056) is always applied fresh so results reflect
-    the current filename even after renames.
+    The cache stores raw CLAP results (top _CLAP_CANDIDATES, no boost). The
+    filename + metadata boost is always applied fresh so results reflect the
+    current filename and embedded metadata even after renames or edits. When
+    ``llm_rerank_enabled`` and the LLM provider is loaded, the top-1 of the
+    boosted list is replaced by the LLM's pick from the top-10.
     """
     file_hash = row["file_hash"]
     file_path = row["path"]
     filename = row.get("filename")
+    metadata = read_structured_metadata(file_path)
+    descriptive_metadata = read_descriptive_metadata(file_path)
 
+    cached_classification: list[ClassificationMatch] | None = None
+    caption: str | None = None
     if not req.force:
         cached = await get_cached_analysis(file_hash)
         if cached is not None:
-            classification = [
+            cached_classification = [
                 ClassificationMatch(**m) for m in json.loads(cached["classification"])
             ]
             caption = cached.get("caption")
-            return apply_filename_boost(classification, filename), caption
 
-    classifier = model_manager.get_classifier()
-    classification = await asyncio.to_thread(
-        classifier.classify, file_path, _CLAP_CANDIDATES
+    if cached_classification is None:
+        classifier = model_manager.get_classifier()
+        cached_classification = await asyncio.to_thread(
+            classifier.classify, file_path, _CLAP_CANDIDATES
+        )
+        if 2 in req.tiers:
+            captioner = model_manager.get_captioner()
+            caption = await asyncio.to_thread(captioner.caption, file_path)
+        cls_json = json.dumps([m.model_dump() for m in cached_classification])
+        await store_cached_analysis(file_hash, cls_json, caption, "2023")
+
+    # Boost width must cover the LLM's candidate budget: the rerank step picks
+    # from `boosted[:prompt.candidates_n]`, so a smaller boost silently starves
+    # the LLM. Dev harness boosts to 15 (with buffer); we match the prompt's n.
+    prompt = load_prompt()
+    boosted = apply_filename_boost(
+        cached_classification, filename, metadata=metadata, top_n=prompt.candidates_n,
     )
+    reranked = await _apply_llm_rerank(
+        boosted, filename, descriptive_metadata, file_hash, force=req.force
+    )
+    return reranked, caption
 
-    caption = None
-    if 2 in req.tiers:
-        captioner = model_manager.get_captioner()
-        caption = await asyncio.to_thread(captioner.caption, file_path)
 
-    # Cache raw CLAP results (without filename boost)
-    cls_json = json.dumps([m.model_dump() for m in classification])
-    await store_cached_analysis(file_hash, cls_json, caption, "2023")
+async def _apply_llm_rerank(
+    boosted: list[ClassificationMatch],
+    filename: str | None,
+    descriptive_metadata: dict[str, str],
+    file_hash: str,
+    *,
+    force: bool,
+) -> list[ClassificationMatch]:
+    """If the setting is on and the LLM is loaded, promote its pick to top-1.
 
-    return apply_filename_boost(classification, filename), caption
+    Soft failure: any unavailability (setting off, model not downloaded, load
+    failed) returns the boosted list unchanged. Result is cached by
+    (file_hash, prompt_version, model_version); ``force=True`` bypasses cache.
+    """
+    if not get_settings().llm_rerank_enabled:
+        return boosted
+    if not filename or not boosted:
+        return boosted
+    provider = model_manager.get_llm_provider()
+    if provider is None:
+        return boosted
+
+    prompt = load_prompt()
+    if not force:
+        cached = await get_cached_llm_pick(
+            file_hash, prompt.version, provider.model_version
+        )
+        if cached is not None:
+            return _promote_to_top1(boosted, cached["chosen_cat_id"])
+
+    candidates = boosted[: prompt.candidates_n]
+    try:
+        result = await asyncio.to_thread(
+            provider.pick,
+            filename=filename,
+            metadata=descriptive_metadata,
+            candidates=candidates,
+        )
+    except Exception:
+        logger.exception("LLM rerank failed; using CLAP+boost result")
+        return boosted
+
+    await store_cached_llm_pick(
+        file_hash=file_hash,
+        prompt_version=prompt.version,
+        model_version=provider.model_version,
+        chosen_cat_id=result.cat_id,
+        retried=result.retried,
+        fallback_to_clap_top1=result.fallback_to_clap_top1,
+        latency_ms=result.latency_ms,
+    )
+    return _promote_to_top1(boosted, result.cat_id)
+
+
+def _promote_to_top1(
+    ordered: list[ClassificationMatch], chosen_cat_id: str
+) -> list[ClassificationMatch]:
+    """Move the match with ``chosen_cat_id`` to position 0, preserve rest."""
+    for i, m in enumerate(ordered):
+        if m.cat_id == chosen_cat_id:
+            if i == 0:
+                return ordered
+            return [m, *ordered[:i], *ordered[i + 1 :]]
+    return ordered
 
 
 async def _analyze_single_for_batch(row: dict, req: AnalyzeRequest) -> dict:

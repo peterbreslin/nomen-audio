@@ -1,5 +1,6 @@
 """Entry point for ``python -m app`` — prints PORT before heavy imports."""
 
+import os
 import socket
 
 
@@ -9,7 +10,7 @@ def _find_open_port() -> int:
         return s.getsockname()[1]
 
 
-port = _find_open_port()
+port = int(os.environ.get("NOMEN_PORT") or _find_open_port())
 print(f"PORT={port}", flush=True)
 
 import uvicorn  # noqa: E402

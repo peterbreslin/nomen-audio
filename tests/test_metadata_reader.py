@@ -1,6 +1,7 @@
 """Tests for the metadata reader module."""
 
 import os
+import struct
 
 from conftest import (
     IXML_WITH_USER,
@@ -9,7 +10,12 @@ from conftest import (
     write_wav,
 )
 
-from app.metadata.reader import compute_file_hash, read_metadata
+from app.metadata.reader import (
+    compute_file_hash,
+    extract_descriptive_fields,
+    extract_structured_fields,
+    read_metadata,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +60,30 @@ def test_read_metadata_bext_fields(tmp_path):
     assert result["bext"]["description"] == "Rainstorm recording"
     assert result["bext"]["originator"] == "JD"
     assert result["bext"]["originator_date"] == "2024-01-01"
+
+
+def test_read_metadata_bext_non_ascii_originator(tmp_path):
+    """BEXT with UTF-8 bytes outside ASCII must read without crashing.
+
+    EBU 3285 mandates ASCII for BEXT strings, but Soundminer-tagged libraries
+    and other tools routinely emit UTF-8 (copyright signs, accented chars).
+    The reader must tolerate this; otherwise affected files become un-importable.
+    Reproduces the failure that broke two CA AUDITORIUM/CLUB eval files.
+    """
+    bext = bytearray(602)
+    desc = "Audience applause".encode("utf-8")
+    bext[0 : len(desc)] = desc
+    # 0xc2 is the UTF-8 leading byte that crashed the production import
+    originator = "Façade Records".encode("utf-8")
+    bext[256 : 256 + len(originator)] = originator
+    bext[320:330] = b"2024-01-01"
+    struct.pack_into("<H", bext, 346, 1)
+
+    path = write_wav(tmp_path, "utf8_bext.wav", bext_data=bytes(bext))
+    result = read_metadata(str(path))
+
+    assert result["bext"] is not None
+    assert result["bext"]["originator"] is not None
 
 
 def test_read_metadata_no_bext(tmp_path):
@@ -247,6 +277,60 @@ def test_read_metadata_aswg_creator_id_separate_from_originator(tmp_path):
 # ---------------------------------------------------------------------------
 # compute_file_hash
 # ---------------------------------------------------------------------------
+
+
+def test_extract_descriptive_fields_includes_free_form():
+    """Free-form fields (description, bext_description, info_comment) feed
+    the LLM prompt and must be in the descriptive subset."""
+    meta = {
+        "category": "Ambience",
+        "subcategory": "Underwater",
+        "description": "Hydrophone recording",
+        "library": "X",  # admin — excluded
+        "rating": 5,  # technical — excluded
+        "bext": {"description": "bext text"},
+        "info": {"title": "title", "comment": "comment", "genre": "Ambience"},
+    }
+    out = extract_descriptive_fields(meta)
+    assert out["category"] == "Ambience"
+    assert out["subcategory"] == "Underwater"
+    assert out["description"] == "Hydrophone recording"
+    assert out["bext_description"] == "bext text"
+    assert out["info_title"] == "title"
+    assert out["info_genre"] == "Ambience"
+    assert "rating" not in out
+
+
+def test_extract_structured_fields_excludes_free_form():
+    """Structured subset must omit free-form fields that mislead the keyword
+    boost (description, bext_description, info_comment, info_genre)."""
+    meta = {
+        "category": "Ambience",
+        "subcategory": "Underwater",
+        "keywords": "Iceland Glacier Underwater Ice",
+        "description": "Constant water flowing and occasional ice scrapes",
+        "bext": {"description": "tank rolling forward"},
+        "info": {"comment": "musical tonal", "genre": "MAGIC"},
+    }
+    out = extract_structured_fields(meta)
+    assert out == {
+        "category": "Ambience",
+        "subcategory": "Underwater",
+        "keywords": "Iceland Glacier Underwater Ice",
+    }
+
+
+def test_extract_structured_fields_empty_when_no_structured():
+    """Files with only free-form bext_description (the common legacy case)
+    yield no structured tokens — the boost falls back to filename-only."""
+    meta = {
+        "category": None,
+        "subcategory": None,
+        "keywords": None,
+        "bext": {"description": "75mm tank close shots"},
+    }
+    out = extract_structured_fields(meta)
+    assert out == {}
 
 
 def test_compute_file_hash_deterministic(tmp_path):

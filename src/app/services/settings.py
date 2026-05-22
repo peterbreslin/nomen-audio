@@ -64,6 +64,9 @@ class AppSettings(BaseModel):
     llm_provider: str | None = None
     llm_api_key: str | None = None
     model_directory: str = "data/models"
+    llm_rerank_enabled: bool = True
+    llm_ollama_model: str = "ministral-3:3b"
+    llm_ollama_base_url: str = "http://localhost:11434"
 
 
 class SettingsUpdate(BaseModel):
@@ -80,6 +83,9 @@ class SettingsUpdate(BaseModel):
     llm_provider: str | None = None
     llm_api_key: str | None = None
     model_directory: str | None = None
+    llm_rerank_enabled: bool | None = None
+    llm_ollama_model: str | None = None
+    llm_ollama_base_url: str | None = None
 
 
 # ---------------------------------------------------------------------------
