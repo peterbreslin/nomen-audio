@@ -18,10 +18,10 @@ Nomen Audio addresses this issue by providing an automated way to standardize au
 | ---------------------------------------------------------- | ----------------------------------------------------------------- |
 | Import any folder of WAV files                             | MS-CLAP zero-shot classification → top-N UCS category suggestions |
 | Spreadsheet editor — 20+ columns, inline editing           | ClapCap natural-language description generation                   |
-| UCS cascading dropdowns (753 subcategories, 49 categories) | SSE streaming batch analysis with per-file progress               |
-| iXML / BEXT / RIFF INFO round-trip read + write            | All suggestions are proposals — nothing written until user saves  |
-| Waveform player (wavesurfer.js)                            | Confidence-ranked suggestions with one-click accept               |
-| File tree sidebar with search                              |                                                                   |
+| UCS cascading dropdowns (753 subcategories, 49 categories) | Local LLM rerank (Ollama + `ministral-3:3b`) for higher top-1     |
+| iXML / BEXT / RIFF INFO round-trip read + write            | SSE streaming batch analysis with per-file progress               |
+| Waveform player (wavesurfer.js)                            | All suggestions are proposals — nothing written until user saves  |
+| File tree sidebar with search                              | Confidence-ranked suggestions with one-click accept               |
 | Batch save / revert / find & replace                       |                                                                   |
 | Atomic rename: original untouched on error                 |                                                                   |
 
@@ -64,11 +64,23 @@ Model weights are **not bundled** in the installer and download automatically on
 | MS-CLAP 2023 (classifier)      | ~660 MB | Background, on every first launch                        |
 | ClapCap + GPT-2 (descriptions) | ~2.1 GB | On first click of **Generate** with descriptions enabled |
 
-**Total on first full use: ~2.8 GB.** Subsequent launches use cached weights — no download.
+**Total on first full use: ~2.8 GB.** Subsequent launches use cached weights, no download.
 
 Weights are stored in the standard Hugging Face cache at `%USERPROFILE%\.cache\huggingface\hub\`.
 
 > For full troubleshooting steps (antivirus, proxy, slow first analysis), see [`docs/installation.md`](docs/installation.md).
+
+### Step 5 — LLM rerank (recommended)
+
+The classifier ships with an optional LLM rerank step that turns CLAP's top 10 candidates into a single high quality choice. On the 41 file evaluation set this lifts top 1 accuracy from 12/41 (CLAP alone) to 27/41. The rerank runs locally via [Ollama](https://ollama.com/) with the `ministral-3:3b` model (2.95 GB, GPU accelerated on supported hardware, around 1.3 seconds per file).
+
+1. Install Ollama from [ollama.com/download](https://ollama.com/download).
+2. Pull the model: `ollama pull ministral-3:3b`.
+3. Make sure the Ollama daemon is running (it starts automatically on Windows after install).
+
+Nomen Audio enables rerank by default and looks for Ollama at `http://localhost:11434`. If the daemon is unreachable or the model is missing, classification silently falls back to CLAP plus filename boost. You can disable rerank entirely in the settings modal.
+
+To use a different model or daemon URL, edit `llm_ollama_model` and `llm_ollama_base_url` in `%APPDATA%\NomenAudio\settings.json`.
 
 ## Development Setup
 
@@ -79,6 +91,7 @@ Weights are stored in the standard Hugging Face cache at `%USERPROFILE%\.cache\h
 - [Node.js](https://nodejs.org/) ≥ 20
 - [Rust stable](https://rustup.rs/) + `cargo`
 - [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) (C++ workload, required by Tauri)
+- [Ollama](https://ollama.com/) with `ministral-3:3b` pulled (powers the LLM rerank step; the app still runs without it but rerank is disabled)
 
 ### Steps
 
