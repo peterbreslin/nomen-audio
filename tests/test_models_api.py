@@ -35,6 +35,8 @@ async def test_models_status_ready(client):
         "loading": False,
         "error": None,
         "status_message": "Models ready",
+        "llm_rerank_enabled": True,
+        "llm_provider_reachable": True,
     }
     with patch("app.routers.models.model_manager.get_status", return_value=mock_status):
         resp = await client.get("/models/status")
@@ -56,6 +58,8 @@ async def test_models_status_loading(client):
         "loading": True,
         "error": None,
         "status_message": "Loading CLAP model...",
+        "llm_rerank_enabled": True,
+        "llm_provider_reachable": False,
     }
     with patch("app.routers.models.model_manager.get_status", return_value=mock_status):
         resp = await client.get("/models/status")
@@ -75,6 +79,8 @@ async def test_models_status_error(client):
         "loading": False,
         "error": "Failed to download model",
         "status_message": "Error: Failed to download model",
+        "llm_rerank_enabled": True,
+        "llm_provider_reachable": False,
     }
     with patch("app.routers.models.model_manager.get_status", return_value=mock_status):
         resp = await client.get("/models/status")

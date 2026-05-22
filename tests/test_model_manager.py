@@ -7,8 +7,20 @@ import pytest
 from app.ml import model_manager
 
 
+class _StubProvider:
+    """Stand-in for OllamaProvider in tests — never hits the network."""
+
+    reachable = False
+
+    def __init__(self, **kwargs):
+        pass
+
+    def is_reachable(self):
+        return _StubProvider.reachable
+
+
 @pytest.fixture(autouse=True)
-def _reset_manager():
+def _reset_manager(monkeypatch):
     """Reset model_manager module state before each test."""
     model_manager._classifier = None
     model_manager._captioner = None
@@ -16,6 +28,10 @@ def _reset_manager():
     model_manager._ready = False
     model_manager._error = None
     model_manager._status_message = ""
+    model_manager._llm_reachable_cache = None
+    # Stub OllamaProvider so get_status()'s probe never touches the real daemon.
+    _StubProvider.reachable = False
+    monkeypatch.setattr(model_manager, "OllamaProvider", _StubProvider)
     yield
     model_manager._classifier = None
     model_manager._captioner = None
@@ -23,6 +39,7 @@ def _reset_manager():
     model_manager._ready = False
     model_manager._error = None
     model_manager._status_message = ""
+    model_manager._llm_reachable_cache = None
 
 
 # ---------------------------------------------------------------------------
@@ -123,3 +140,74 @@ def test_get_captioner_reuses_instance(mock_cap_cls):
     cap = model_manager.get_captioner()
     assert cap is mock_instance
     mock_cap_cls.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# LLM rerank status (probe cache + enabled gate)
+# ---------------------------------------------------------------------------
+
+
+def test_get_status_skips_probe_when_rerank_disabled(monkeypatch):
+    """Don't probe Ollama if rerank is off — short-circuits to False."""
+    from app.services.settings import AppSettings
+
+    fake = AppSettings(llm_rerank_enabled=False)
+    monkeypatch.setattr("app.services.settings.get_settings", lambda: fake)
+    _StubProvider.reachable = True  # would return True if probed
+
+    status = model_manager.get_status()
+
+    assert status["llm_rerank_enabled"] is False
+    assert status["llm_provider_reachable"] is False
+
+
+def test_probe_llm_reachable_caches_within_ttl(monkeypatch):
+    """One Ollama probe per TTL window, even across many calls."""
+    from app.services.settings import AppSettings
+
+    calls = []
+
+    class CountingProvider:
+        def __init__(self, **kwargs):
+            pass
+
+        def is_reachable(self):
+            calls.append(1)
+            return True
+
+    monkeypatch.setattr(model_manager, "OllamaProvider", CountingProvider)
+    fake = AppSettings(llm_rerank_enabled=True)
+
+    assert model_manager._probe_llm_reachable(fake) is True
+    assert model_manager._probe_llm_reachable(fake) is True
+    assert model_manager._probe_llm_reachable(fake) is True
+    assert len(calls) == 1
+
+
+def test_probe_llm_reachable_reprobes_after_ttl(monkeypatch):
+    """Once the TTL expires, the next call re-probes the daemon."""
+    from app.services.settings import AppSettings
+
+    calls = []
+
+    class CountingProvider:
+        def __init__(self, **kwargs):
+            pass
+
+        def is_reachable(self):
+            calls.append(1)
+            return True
+
+    monkeypatch.setattr(model_manager, "OllamaProvider", CountingProvider)
+    fake = AppSettings(llm_rerank_enabled=True)
+
+    model_manager._probe_llm_reachable(fake)
+    # Forge a cache entry older than the TTL.
+    ts, reachable = model_manager._llm_reachable_cache
+    model_manager._llm_reachable_cache = (
+        ts - model_manager._LLM_REACHABLE_TTL - 1,
+        reachable,
+    )
+    model_manager._probe_llm_reachable(fake)
+
+    assert len(calls) == 2

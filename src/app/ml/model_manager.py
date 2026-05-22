@@ -3,6 +3,7 @@
 import logging
 import os
 import threading
+import time
 
 from app import paths
 from app.llm.ollama_provider import OllamaProvider
@@ -24,6 +25,12 @@ _error: str | None = None
 _status_message: str = ""
 _lock = threading.Lock()
 
+# TTL cache for the Ollama reachability probe. /models/status is polled every
+# 2s during boot; a 10s window avoids hammering the daemon without making
+# the indicator feel laggy.
+_LLM_REACHABLE_TTL = 10.0
+_llm_reachable_cache: tuple[float, bool] | None = None
+
 
 # ---------------------------------------------------------------------------
 # Public API
@@ -43,8 +50,12 @@ def start_loading() -> None:
 
 def get_status() -> dict:
     """Return current model status for the /models/status endpoint."""
+    from app.services.settings import get_settings
+
+    settings = get_settings()
     cls = _classifier
     cap = _captioner
+    rerank_enabled = settings.llm_rerank_enabled
     return {
         "clap_loaded": cls is not None and cls._model is not None,
         "clapcap_loaded": cap is not None,
@@ -53,7 +64,32 @@ def get_status() -> dict:
         "loading": _loading,
         "error": _error,
         "status_message": _status_message,
+        "llm_rerank_enabled": rerank_enabled,
+        "llm_provider_reachable": (
+            _probe_llm_reachable(settings) if rerank_enabled else False
+        ),
     }
+
+
+def _probe_llm_reachable(settings) -> bool:
+    """Probe the configured Ollama daemon, cached for ``_LLM_REACHABLE_TTL`` seconds.
+
+    Re-probes after the TTL so the UI indicator notices a daemon coming up or
+    going down. Probe itself is the bare /api/tags GET that OllamaProvider uses.
+    """
+    global _llm_reachable_cache
+    now = time.monotonic()
+    if _llm_reachable_cache is not None:
+        ts, reachable = _llm_reachable_cache
+        if now - ts < _LLM_REACHABLE_TTL:
+            return reachable
+    probe = OllamaProvider(
+        model=settings.llm_ollama_model,
+        base_url=settings.llm_ollama_base_url,
+    )
+    reachable = probe.is_reachable()
+    _llm_reachable_cache = (now, reachable)
+    return reachable
 
 
 def get_classifier() -> CLAPClassifier:
