@@ -251,8 +251,12 @@ async def _run_analysis(
         cls_json = json.dumps([m.model_dump() for m in cached_classification])
         await store_cached_analysis(file_hash, cls_json, caption, "2023")
 
+    # Boost width must cover the LLM's candidate budget: the rerank step picks
+    # from `boosted[:prompt.candidates_n]`, so a smaller boost silently starves
+    # the LLM. Dev harness boosts to 15 (with buffer); we match the prompt's n.
+    prompt = load_prompt()
     boosted = apply_filename_boost(
-        cached_classification, filename, metadata=metadata
+        cached_classification, filename, metadata=metadata, top_n=prompt.candidates_n,
     )
     reranked = await _apply_llm_rerank(
         boosted, filename, descriptive_metadata, file_hash, force=req.force
