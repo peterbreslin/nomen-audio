@@ -144,6 +144,11 @@ def _load_pipeline() -> None:
     _status_message = "Loading CLAP model..."
     classifier = CLAPClassifier()
     classifier.load_model()
+    if os.environ.get("NOMEN_CLAP_DETERMINISTIC_SEGMENT") == "1":
+        from app.ml.clap_compat import patch_clap_deterministic_segment
+
+        patch_clap_deterministic_segment(classifier._model)
+        logger.info("CLAP deterministic-segment patch applied (eval mode)")
 
     _status_message = "Building UCS labels..."
     labels = build_labels()
