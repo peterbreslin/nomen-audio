@@ -123,7 +123,7 @@ def read_metadata(path: str) -> dict[str, Any]:
 
     Returns dict with keys: technical, bext, info, + all 18 nullable metadata fields.
     """
-    info = WavInfoReader(path)
+    info = _open_wav_info(path)
 
     result: dict[str, Any] = {key: None for key in METADATA_KEYS}
     result["technical"] = _extract_technical(info, path)
@@ -210,6 +210,20 @@ def read_structured_metadata(path: str) -> dict[str, str]:
         logger.exception("Failed to read metadata for %s", path)
         return {}
     return extract_structured_fields(meta)
+
+
+def _open_wav_info(path: str) -> WavInfoReader:
+    """Open a WAV with a forgiving BEXT encoding.
+
+    Why: wavinfo defaults to ``bext_encoding='ascii'`` per EBU 3285, but
+    Soundminer/Reaper/etc. routinely emit UTF-8 bytes (©, accented chars) in
+    BEXT originator/description. Strict ASCII makes those files un-importable.
+    Try UTF-8 first; fall back to Latin-1, which decodes any byte sequence.
+    """
+    try:
+        return WavInfoReader(path, bext_encoding="utf-8")
+    except UnicodeDecodeError:
+        return WavInfoReader(path, bext_encoding="latin-1")
 
 
 def compute_file_hash(path: str) -> str:

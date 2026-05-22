@@ -1,6 +1,7 @@
 """Tests for the metadata reader module."""
 
 import os
+import struct
 
 from conftest import (
     IXML_WITH_USER,
@@ -59,6 +60,30 @@ def test_read_metadata_bext_fields(tmp_path):
     assert result["bext"]["description"] == "Rainstorm recording"
     assert result["bext"]["originator"] == "JD"
     assert result["bext"]["originator_date"] == "2024-01-01"
+
+
+def test_read_metadata_bext_non_ascii_originator(tmp_path):
+    """BEXT with UTF-8 bytes outside ASCII must read without crashing.
+
+    EBU 3285 mandates ASCII for BEXT strings, but Soundminer-tagged libraries
+    and other tools routinely emit UTF-8 (copyright signs, accented chars).
+    The reader must tolerate this; otherwise affected files become un-importable.
+    Reproduces the failure that broke two CA AUDITORIUM/CLUB eval files.
+    """
+    bext = bytearray(602)
+    desc = "Audience applause".encode("utf-8")
+    bext[0 : len(desc)] = desc
+    # 0xc2 is the UTF-8 leading byte that crashed the production import
+    originator = "Façade Records".encode("utf-8")
+    bext[256 : 256 + len(originator)] = originator
+    bext[320:330] = b"2024-01-01"
+    struct.pack_into("<H", bext, 346, 1)
+
+    path = write_wav(tmp_path, "utf8_bext.wav", bext_data=bytes(bext))
+    result = read_metadata(str(path))
+
+    assert result["bext"] is not None
+    assert result["bext"]["originator"] is not None
 
 
 def test_read_metadata_no_bext(tmp_path):
